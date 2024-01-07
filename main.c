@@ -79,6 +79,8 @@ static void reset_peripherals(void) {
 static void jump_to_vtor(uint32_t vtor) {
     // Derived from the Leaf Labs Cortex-M3 bootloader.
     // Copyright (c) 2010 LeafLabs LLC.
+    // Modified 2021 Brian Starkey <stark3y@gmail.com>
+    // Originally under The MIT License
 
     uint32_t reset_vector = *(volatile uint32_t *) (vtor + 0x04);
     SCB->VTOR = (volatile uint32_t)(vtor);
