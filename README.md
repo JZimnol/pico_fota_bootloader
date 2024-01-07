@@ -89,7 +89,7 @@ int main() {
     ...
 
     // acquire the data (e.g. from the web) and write it into the download slot
-    // using chunks of 256 bytes
+    // using chunks of N*256 bytes
     for (int i = 0; i < size; i++) {
         (void) pfb_write_to_flash_aligned_256_bytes(src, offset_bytes, len_bytes);
     }
