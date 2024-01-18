@@ -48,6 +48,7 @@ function(target_compile_link_options Name Option)
     target_link_options(${Name} PRIVATE ${Option})
 endfunction()
 
+target_compile_link_options(pico_fota_bootloader "-Os")
 target_compile_link_options(pico_fota_bootloader "-ffunction-sections")
 target_compile_link_options(pico_fota_bootloader "-fdata-sections")
 target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/linker_common")
