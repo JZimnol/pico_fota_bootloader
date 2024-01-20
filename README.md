@@ -26,6 +26,9 @@ The memory layout is as follows:
 +-------------------------------------------+
 ```
 
+**Basic usage can be found
+[here](https://github.com/JZimnol/pico_fota_example).**
+
 ## File structure - example
 
 Assume the following file structure:
