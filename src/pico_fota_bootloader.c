@@ -20,126 +20,133 @@
  * SOFTWARE.
  */
 
-#include "hardware/flash.h"
-#include "hardware/sync.h"
-#include "hardware/watchdog.h"
+#include <assert.h>
+#include <stdio.h>
+#include <string.h>
 
-#include "pico_fota_bootloader.h"
+#include <hardware/flash.h>
+#include <hardware/sync.h>
+#include <hardware/watchdog.h>
 
-extern uint32_t __FLASH_INFO_START_ADDRESS;
-extern uint32_t __FLASH_INFO_APP_HEADER_ADDRESS;
-extern uint32_t __FLASH_INFO_DOWNLOAD_HEADER_ADDRESS;
-extern uint32_t __FLASH_INFO_DOWNLOAD_VALID_ADDRESS;
-extern uint32_t __FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS;
-extern uint32_t __FLASH_APP_START_ADDRESS;
-extern uint32_t __FLASH_DOWNLOAD_SLOT_START_ADDRESS;
-extern uint32_t __FLASH_SWAP_SPACE_LENGTH;
+#include <pico_fota_bootloader.h>
+
+#include "../linker_common/linker_definitions.h"
+
+/**
+ * Some random values tbh.
+ */
+#define PFB_SHOULD_SWAP_MAGIC 0xabcdef12
+#define PFB_SHOULD_NOT_SWAP_MAGIC 0x00000000
+
+#define PFB_HAS_NEW_FIRMWARE_MAGIC 0x12345678
+#define PFB_NO_NEW_FIRMWARE_MAGIC 0x00000000
+
+#define PFB_IS_AFTER_ROLLBACK_MAGIC 0xbeefbeef
+#define PFB_IS_NOT_AFTER_ROLLBACK_MAGIC 0x00000000
+
+#define PFB_SHOULD_ROLLBACK_MAGIC 0xdeadead
+#define PFB_SHOULD_NOT_ROLLBACK_MAGIC 0x00000000
 
 static inline void erase_flash_info_partition_isr_unsafe(void) {
-    flash_range_erase(PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                              __FLASH_INFO_START_ADDRESS),
+    flash_range_erase(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_INFO_START),
                       FLASH_SECTOR_SIZE);
 }
 
-static void write_4_bytes_to_flash_isr_unsafe(uint32_t starting_address,
-                                              uint32_t data) {
-    uint8_t data_arr_u8[FLASH_PAGE_SIZE] = {};
+static void
+overwrite_4_bytes_in_flash_isr_unsafe(uint32_t dest_addr_with_xip_offset,
+                                      uint32_t data) {
+    uint8_t data_arr_u8[FLASH_SECTOR_SIZE] = {};
     uint32_t *data_ptr_u32 = (uint32_t *) data_arr_u8;
-    data_ptr_u32[0] = data;
-    flash_range_program(starting_address, data_arr_u8, FLASH_PAGE_SIZE);
-}
+    uint32_t erase_start_addr_with_xip_offset =
+            PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_INFO_START);
 
-static inline void restore_image_headers_to_flash_isr_unsafe(void) {
-    write_4_bytes_to_flash_isr_unsafe(
-            PFB_VALUE_WITH_XIP_OFFSET_AS_U32(__FLASH_INFO_APP_HEADER_ADDRESS),
-            PFB_VALUE_AS_U32(__FLASH_APP_START_ADDRESS));
-    write_4_bytes_to_flash_isr_unsafe(
-            PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                    __FLASH_INFO_DOWNLOAD_HEADER_ADDRESS),
-            PFB_VALUE_AS_U32(__FLASH_DOWNLOAD_SLOT_START_ADDRESS));
-}
+    assert(dest_addr_with_xip_offset >= erase_start_addr_with_xip_offset);
 
-static inline void mark_download_slot_isr_unsafe(uint32_t type) {
-    write_4_bytes_to_flash_isr_unsafe(
-            PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                    __FLASH_INFO_DOWNLOAD_VALID_ADDRESS),
-            type);
-}
+    void *flash_info_start_addr =
+            (void *) (PFB_ADDR_AS_U32(__FLASH_INFO_START));
+    memcpy(data_arr_u8, flash_info_start_addr, FLASH_SECTOR_SIZE);
 
-static inline void notify_pico_about_firmware_isr_unsafe(uint32_t type) {
-    write_4_bytes_to_flash_isr_unsafe(
-            PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                    __FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS),
-            type);
-}
+    size_t array_index =
+            (dest_addr_with_xip_offset - erase_start_addr_with_xip_offset)
+            / (sizeof(uint32_t));
+    data_ptr_u32[array_index] = data;
 
-static void mark_download_slot(uint32_t type) {
-    uint32_t saved_firmware_state = __FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS;
-    uint32_t saved_interrupts = save_and_disable_interrupts();
     erase_flash_info_partition_isr_unsafe();
-    restore_image_headers_to_flash_isr_unsafe();
-    notify_pico_about_firmware_isr_unsafe(saved_firmware_state);
-    mark_download_slot_isr_unsafe(type);
+    flash_range_program(erase_start_addr_with_xip_offset, data_arr_u8,
+                        FLASH_SECTOR_SIZE);
+}
+
+static void overwrite_4_bytes_in_flash(uint32_t dest_addr, uint32_t data) {
+    uint32_t saved_interrupts = save_and_disable_interrupts();
+    overwrite_4_bytes_in_flash_isr_unsafe(dest_addr - XIP_BASE, data);
     restore_interrupts(saved_interrupts);
 }
 
-static void notify_pico_about_firmware(uint32_t type) {
-    uint32_t saved_slot_state = __FLASH_INFO_DOWNLOAD_VALID_ADDRESS;
-    uint32_t saved_interrupts = save_and_disable_interrupts();
-    erase_flash_info_partition_isr_unsafe();
-    restore_image_headers_to_flash_isr_unsafe();
-    mark_download_slot_isr_unsafe(saved_slot_state);
-    notify_pico_about_firmware_isr_unsafe(type);
-    restore_interrupts(saved_interrupts);
+static void mark_download_slot(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_IS_DOWNLOAD_SLOT_VALID);
+
+    overwrite_4_bytes_in_flash(dest_addr, magic);
+}
+
+static void notify_pico_about_firmware(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_IS_FIRMWARE_SWAPPED);
+
+    overwrite_4_bytes_in_flash(dest_addr, magic);
+}
+
+static void mark_if_should_rollback(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_SHOULD_ROLLBACK);
+
+    overwrite_4_bytes_in_flash(dest_addr, magic);
+}
+
+static void mark_if_is_after_rollback(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_IS_AFTER_ROLLBACK);
+
+    overwrite_4_bytes_in_flash(dest_addr, magic);
 }
 
 void pfb_mark_download_slot_as_valid(void) {
-    mark_download_slot(PFB_SLOT_IS_VALID_MAGIC);
+    mark_download_slot(PFB_SHOULD_SWAP_MAGIC);
 }
 
 void pfb_mark_download_slot_as_invalid(void) {
-    mark_download_slot(PFB_SLOT_IS_INVALID_MAGIC);
-}
-
-void _pfb_notify_pico_has_new_firmware(void) {
-    notify_pico_about_firmware(PFB_HAS_NEW_FIRMWARE_MAGIC);
-}
-
-void _pfb_notify_pico_has_no_new_firmware(void) {
-    notify_pico_about_firmware(PFB_NO_NEW_FIRMWARE_MAGIC);
+    mark_download_slot(PFB_SHOULD_NOT_SWAP_MAGIC);
 }
 
 bool pfb_is_after_firmware_update(void) {
-    return (__FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS
-            == PFB_HAS_NEW_FIRMWARE_MAGIC);
+    return (__FLASH_INFO_IS_FIRMWARE_SWAPPED == PFB_HAS_NEW_FIRMWARE_MAGIC);
 }
 
 int pfb_write_to_flash_aligned_256_bytes(uint8_t *src,
                                          size_t offset_bytes,
                                          size_t len_bytes) {
-    if (len_bytes % 256
+    if (len_bytes % PFB_ALIGN_SIZE || offset_bytes % PFB_ALIGN_SIZE
         || offset_bytes + len_bytes
-                   > (size_t) PFB_VALUE_AS_U32(__FLASH_SWAP_SPACE_LENGTH)) {
+                   > (size_t) PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH)) {
         return 1;
     }
 
+    uint32_t dest_address =
+            PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_DOWNLOAD_SLOT_START)
+            + offset_bytes;
     uint32_t saved_interrupts = save_and_disable_interrupts();
-    flash_range_program(PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                                __FLASH_DOWNLOAD_SLOT_START_ADDRESS)
-                                + offset_bytes,
-                        src,
-                        len_bytes);
+    flash_range_program(dest_address, src, len_bytes);
     restore_interrupts(saved_interrupts);
 
     return 0;
 }
 
 void pfb_initialize_download_slot(void) {
-    const uint32_t SWAP_LEN = PFB_VALUE_AS_U32(__FLASH_SWAP_SPACE_LENGTH);
+    uint32_t erase_len = PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH);
+    uint32_t erase_address_with_xip_offset =
+            PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_DOWNLOAD_SLOT_START);
+    assert(erase_len % FLASH_SECTOR_SIZE == 0);
+
+    pfb_firmware_commit();
+
     uint32_t saved_interrupts = save_and_disable_interrupts();
-    flash_range_erase(PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                              __FLASH_DOWNLOAD_SLOT_START_ADDRESS),
-                      SWAP_LEN);
+    flash_range_erase(erase_address_with_xip_offset, erase_len);
     restore_interrupts(saved_interrupts);
 }
 
@@ -147,4 +154,40 @@ void pfb_perform_update(void) {
     watchdog_enable(1, 1);
     while (1)
         ;
+}
+
+void pfb_firmware_commit(void) {
+    mark_if_should_rollback(PFB_SHOULD_NOT_ROLLBACK_MAGIC);
+}
+
+bool pfb_is_after_rollback(void) {
+    return (__FLASH_INFO_IS_AFTER_ROLLBACK == PFB_IS_AFTER_ROLLBACK_MAGIC);
+}
+
+void _pfb_mark_should_rollback(void) {
+    mark_if_should_rollback(PFB_SHOULD_ROLLBACK_MAGIC);
+}
+
+void _pfb_mark_is_after_rollback(void) {
+    mark_if_is_after_rollback(PFB_IS_AFTER_ROLLBACK_MAGIC);
+}
+
+void _pfb_mark_is_not_after_rollback(void) {
+    mark_if_is_after_rollback(PFB_IS_NOT_AFTER_ROLLBACK_MAGIC);
+}
+
+bool _pfb_should_rollback(void) {
+    return (__FLASH_INFO_SHOULD_ROLLBACK == PFB_SHOULD_ROLLBACK_MAGIC);
+}
+
+bool _pfb_has_firmware_to_swap(void) {
+    return (__FLASH_INFO_IS_DOWNLOAD_SLOT_VALID == PFB_SHOULD_SWAP_MAGIC);
+}
+
+void _pfb_mark_pico_has_new_firmware(void) {
+    notify_pico_about_firmware(PFB_HAS_NEW_FIRMWARE_MAGIC);
+}
+
+void _pfb_mark_pico_has_no_new_firmware(void) {
+    notify_pico_about_firmware(PFB_NO_NEW_FIRMWARE_MAGIC);
 }

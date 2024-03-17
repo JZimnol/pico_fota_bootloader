@@ -20,22 +20,19 @@
  * SOFTWARE.
  */
 
-#ifndef PICO_FOTA_BOOTLOADER
-#define PICO_FOTA_BOOTLOADER
+#ifndef PICO_FOTA_BOOTLOADER_H
+#define PICO_FOTA_BOOTLOADER_H
 
-#include "pico/stdlib.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#define PFB_VALUE_AS_U32(Data) (uint32_t) & (Data)
-#define PFB_VALUE_WITH_XIP_OFFSET_AS_U32(Data) \
-    (PFB_VALUE_AS_U32(Data) - (XIP_BASE))
+#include <pico/stdlib.h>
 
-/**
- * Some random values tbh.
- */
-#define PFB_SLOT_IS_VALID_MAGIC 0xabcdef12
-#define PFB_SLOT_IS_INVALID_MAGIC 0x00000000
-#define PFB_HAS_NEW_FIRMWARE_MAGIC 0x12345678
-#define PFB_NO_NEW_FIRMWARE_MAGIC 0x00000000
+#define PFB_ADDR_AS_U32(Data) (uint32_t) & (Data)
+#define PFB_ADDR_WITH_XIP_OFFSET_AS_U32(Data) \
+    (PFB_ADDR_AS_U32(Data) - (XIP_BASE))
+#define PFB_ALIGN_SIZE (256)
 
 /**
  * Mark the download slot as valid, i.e. download slot contains proper binary
@@ -70,8 +67,8 @@ bool pfb_is_after_firmware_update(void);
  * @param len_bytes    Number of bytes that should be written into flash. Should
  *                     be a multiple of 256.
  *
- * @return 1 when @p len_bytes is not multiple of 256 or when ( @p offset_bytes
- *         + @p len_bytes ) exceeds download slot size,
+ * @return 1 when @p len_bytes or @p offset_bytes are not multiple of 256 or
+ *         when ( @p offset_bytes + @p len_bytes ) exceeds download slot size,
  *         0 otherwise.
  */
 int pfb_write_to_flash_aligned_256_bytes(uint8_t *src,
@@ -80,7 +77,9 @@ int pfb_write_to_flash_aligned_256_bytes(uint8_t *src,
 
 /**
  * Initializes the download slot, i.e. erases the download partition. MUST be
- * called before writing data into the flash.
+ * called before writing data into the flash. Before an erase, the function will
+ * call @ref pfb_firmware_commit even if @ref pfb_firmware_commit has been
+ * called before.
  */
 void pfb_initialize_download_slot(void);
 
@@ -90,7 +89,25 @@ void pfb_initialize_download_slot(void);
  */
 void pfb_perform_update(void);
 
-void _pfb_notify_pico_has_new_firmware(void);
-void _pfb_notify_pico_has_no_new_firmware(void);
+/**
+ * Marks the information that the device SHOULD NOT perform rollback in case of
+ * a reboot.
+ */
+void pfb_firmware_commit(void);
 
-#endif // PICO_FOTA_BOOTLOADER
+/**
+ * Returns the information if the device has performed a rollback during the
+ * reboot.
+ * NOTE: this function will return true only if the rollback has been performed
+ *       during the previous reboot.
+ *
+ * @return true if the rollback has been performed during the previous reboot,
+ *         false otherwise.
+ */
+bool pfb_is_after_rollback(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // PICO_FOTA_BOOTLOADER_H

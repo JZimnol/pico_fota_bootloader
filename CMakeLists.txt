@@ -35,7 +35,7 @@ target_link_options(pico_fota_bootloader_lib PRIVATE
 
 # Create bootloader binary
 add_executable(pico_fota_bootloader
-               main.c)
+               bootloader.c)
 
 target_link_libraries(pico_fota_bootloader
                       hardware_structs
@@ -43,10 +43,10 @@ target_link_libraries(pico_fota_bootloader
                       pico_fota_bootloader_lib
                       cmsis_core)
 
-function(target_compile_link_options Name Option)
+function (target_compile_link_options Name Option)
     target_compile_options(${Name} PRIVATE ${Option})
     target_link_options(${Name} PRIVATE ${Option})
-endfunction()
+endfunction ()
 
 target_compile_link_options(pico_fota_bootloader "-Os")
 target_compile_link_options(pico_fota_bootloader "-ffunction-sections")
@@ -56,6 +56,24 @@ target_link_options(pico_fota_bootloader PRIVATE "LINKER:--gc-sections")
 
 pico_set_linker_script(pico_fota_bootloader ${CMAKE_CURRENT_SOURCE_DIR}/linker_common/bootloader.ld)
 
-pico_enable_stdio_usb(pico_fota_bootloader 1)
-pico_enable_stdio_uart(pico_fota_bootloader 0)
+option(WITH_BOOTLOADER_LOGS "Enables logging messages from the bootloader to stdio" ON)
+option(REDIRECT_BOOTLOADER_LOGS_TO_UART "Redirects bootloader's logs from USB to UART" OFF)
+
+if (WITH_BOOTLOADER_LOGS)
+    target_compile_definitions(pico_fota_bootloader PRIVATE WITH_BOOTLOADER_LOGS)
+    if (REDIRECT_BOOTLOADER_LOGS_TO_UART)
+        pico_enable_stdio_usb(pico_fota_bootloader 0)
+        pico_enable_stdio_uart(pico_fota_bootloader 1)
+    else()
+        pico_enable_stdio_usb(pico_fota_bootloader 1)
+        pico_enable_stdio_uart(pico_fota_bootloader 0)
+    endif ()
+endif ()
+
 pico_add_extra_outputs(pico_fota_bootloader)
+
+set(PFB_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
+function (pfb_compile_with_bootloader Target)
+    target_link_options(${Target} PRIVATE "-L${PFB_DIRECTORY}/linker_common")
+    pico_set_linker_script(${Target} ${PFB_DIRECTORY}/linker_common/application.ld)
+endfunction ()

@@ -21,37 +21,43 @@
  */
 
 /*
-    +-------------------------------------------+  <-- __FLASH_START_ADDRESS (0x10000000)
+    +-------------------------------------------+  <-- __FLASH_START (0x10000000)
     |              Bootloader (36k)             |
-    +-------------------------------------------+  <-- __FLASH_INFO_APP_HEADER_ADDRESS
-    |           App Header (256 bytes)          |
-    +-------------------------------------------+  <-- __FLASH_INFO_DOWNLOAD_HEADER_ADDRESS
-    |        Download Header (256 bytes)        |
-    +-------------------------------------------+  <-- __FLASH_INFO_DOWNLOAD_VALID_ADDRESS
-    |         Download Valid (256 bytes)        |
-    +-------------------------------------------+  <-- __FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS
-    |        Firmware Swapped (256 bytes)       |
+    +-------------------------------------------+  <-- __FLASH_INFO_APP_HEADER
+    |             App Header (4 bytes)          |
+    +-------------------------------------------+  <-- __FLASH_INFO_DOWNLOAD_HEADER
+    |         Download Header (4 bytes)         |
+    +-------------------------------------------+  <-- __FLASH_INFO_IS_DOWNLOAD_SLOT_VALID
+    |      Is Download Slot Valid (4 bytes)     |
+    +-------------------------------------------+  <-- __FLASH_INFO_IS_FIRMWARE_SWAPPED
+    |       Is Firmware Swapped (4 bytes)       |
+    +-------------------------------------------+  <-- __FLASH_INFO_IS_AFTER_ROLLBACK
+    |        Is After Rollback (4 bytes)        |
+    +-------------------------------------------+  <-- __FLASH_INFO_SHOULD_ROLLBACK
+    |         Should Rollback (4 bytes)         |
     +-------------------------------------------+
-    |            Padding (3072 bytes)           |
-    +-------------------------------------------+  <-- __FLASH_APP_START_ADDRESS
-    |      Flash Application Slot (1004k)       |
-    +-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START_ADDRESS
+    |            Padding (4072 bytes)           |
+    +-------------------------------------------+  <-- __FLASH_APP_START
+    |       Flash Application Slot (1004k)      |
+    +-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START
     |        Flash Download Slot (1004k)        |
     +-------------------------------------------+
 */
 
-__FLASH_START_ADDRESS = 0x10000000;
+__FLASH_START = 0x10000000;
 __BOOTLOADER_LENGTH = 36k;
 
-__FLASH_INFO_START_ADDRESS = __FLASH_START_ADDRESS + __BOOTLOADER_LENGTH;
+__FLASH_INFO_START = __FLASH_START + __BOOTLOADER_LENGTH;
 __FLASH_INFO_LENGTH = 4k;
 
-__FLASH_INFO_APP_HEADER_ADDRESS = __FLASH_INFO_START_ADDRESS;
-__FLASH_INFO_DOWNLOAD_HEADER_ADDRESS = __FLASH_INFO_APP_HEADER_ADDRESS + 256;
-__FLASH_INFO_DOWNLOAD_VALID_ADDRESS = __FLASH_INFO_DOWNLOAD_HEADER_ADDRESS + 256;
-__FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS = __FLASH_INFO_DOWNLOAD_VALID_ADDRESS + 256;
+__FLASH_INFO_APP_HEADER = __FLASH_INFO_START;
+__FLASH_INFO_DOWNLOAD_HEADER = __FLASH_INFO_APP_HEADER + 4;
+__FLASH_INFO_IS_DOWNLOAD_SLOT_VALID = __FLASH_INFO_DOWNLOAD_HEADER + 4;
+__FLASH_INFO_IS_FIRMWARE_SWAPPED = __FLASH_INFO_IS_DOWNLOAD_SLOT_VALID + 4;
+__FLASH_INFO_IS_AFTER_ROLLBACK = __FLASH_INFO_IS_FIRMWARE_SWAPPED + 4;
+__FLASH_INFO_SHOULD_ROLLBACK = __FLASH_INFO_IS_AFTER_ROLLBACK + 4;
 
-__FLASH_APP_START_ADDRESS = __FLASH_INFO_START_ADDRESS + __FLASH_INFO_LENGTH;
+__FLASH_APP_START = __FLASH_INFO_START + __FLASH_INFO_LENGTH;
 
 /* (2048k - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH) / 2 */
 __FLASH_SWAP_SPACE_LENGTH = 1004k;
@@ -65,8 +71,10 @@ We can declare the (possible .data) as the whole 256k, but that's not likely to
 happen. Assume 128k max, but can be easily lowered depending on the application.
 */
 __FLASH_SLOT_LENGTH = __FLASH_SWAP_SPACE_LENGTH - 128k;
-__FLASH_DOWNLOAD_SLOT_START_ADDRESS = __FLASH_APP_START_ADDRESS + __FLASH_SWAP_SPACE_LENGTH;
+__FLASH_DOWNLOAD_SLOT_START = __FLASH_APP_START + __FLASH_SWAP_SPACE_LENGTH;
 
+ASSERT(__FLASH_SWAP_SPACE_LENGTH == (2048k - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH) / 2,
+      "__FLASH_SWAP_SPACE_LENGTH has incorrect length")
 ASSERT((__FLASH_SWAP_SPACE_LENGTH%4k) == 0, "__FLASH_SWAP_SPACE_LENGTH should be multiple of 4k")
 ASSERT(2048k >= __BOOTLOADER_LENGTH + __FLASH_INFO_LENGTH + 2*__FLASH_SWAP_SPACE_LENGTH,
       "Flash partitions defined incorrectly");

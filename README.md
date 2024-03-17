@@ -1,35 +1,52 @@
 # Raspberry Pi Pico W FOTA Bootloader
 
-This bootloader allows you to perform `Firmware Over The Air` updates with the
-Raspberry Pi Pico W board. It contains all required linker scripts that will
-adapt your application to the new application memory layout.
+This bootloader allows you to perform `Firmware Over The Air (FOTA)` updates
+with the Raspberry Pi Pico W board. It contains all required linker scripts
+that will adapt your application to the new application memory layout.
 
 The memory layout is as follows:
 
 ```
-+-------------------------------------------+  <-- __FLASH_START_ADDRESS (0x10000000)
++-------------------------------------------+  <-- __FLASH_START (0x10000000)
 |              Bootloader (36k)             |
-+-------------------------------------------+  <-- __FLASH_INFO_APP_HEADER_ADDRESS
-|           App Header (256 bytes)          |
-+-------------------------------------------+  <-- __FLASH_INFO_DOWNLOAD_HEADER_ADDRESS
-|        Download Header (256 bytes)        |
-+-------------------------------------------+  <-- __FLASH_INFO_DOWNLOAD_VALID_ADDRESS
-|         Download Valid (256 bytes)        |
-+-------------------------------------------+  <-- __FLASH_INFO_FIRMWARE_SWAPPED_ADDRESS
-|        Firmware Swapped (256 bytes)       |
++-------------------------------------------+  <-- __FLASH_INFO_APP_HEADER
+|             App Header (4 bytes)          |
++-------------------------------------------+  <-- __FLASH_INFO_DOWNLOAD_HEADER
+|         Download Header (4 bytes)         |
++-------------------------------------------+  <-- __FLASH_INFO_IS_DOWNLOAD_SLOT_VALID
+|      Is Download Slot Valid (4 bytes)     |
++-------------------------------------------+  <-- __FLASH_INFO_IS_FIRMWARE_SWAPPED
+|       Is Firmware Swapped (4 bytes)       |
++-------------------------------------------+  <-- __FLASH_INFO_IS_AFTER_ROLLBACK
+|        Is After Rollback (4 bytes)        |
++-------------------------------------------+  <-- __FLASH_INFO_SHOULD_ROLLBACK
+|         Should Rollback (4 bytes)         |
 +-------------------------------------------+
-|            Padding (3072 bytes)           |
-+-------------------------------------------+  <-- __FLASH_APP_START_ADDRESS
-|      Flash Application Slot (1004k)       |
-+-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START_ADDRESS
+|            Padding (4072 bytes)           |
++-------------------------------------------+  <-- __FLASH_APP_START
+|       Flash Application Slot (1004k)      |
++-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START
 |        Flash Download Slot (1004k)        |
 +-------------------------------------------+
 ```
+## Basic usage
 
 **Basic usage can be found
 [here](https://github.com/JZimnol/pico_fota_example).**
 
-## File structure - example
+## Features
+
+`pico_fota_bootloader` supports the following features:
+
+- rollback mechanism - if the freshly downloaded firmware won't be comitted
+  before the very next reboot, the bootloader will perform the rollback (the
+  firmware will be swapped back to the previous working version)
+- basic debug logging - enabled by default, can be turned off using
+  `-DWITH_BOOTLOADER_LOGS=OFF` cmake option
+  - debug logs can be redirected from USB to UART using
+    `-DREDIRECT_BOOTLOADER_LOGS_TO_UART=ON` cmake option
+
+## File structure (example)
 
 Assume the following file structure:
 ```
@@ -43,8 +60,9 @@ your_project/
 │   ├── linker_common/
 │   │   ├── application.ld
 │   │   ├── bootloader.ld
+│   │   ├── linker_definitions.h
 │   │   └── linker_definitions.ld
-│   ├── main.c
+│   ├── bootloader.c
 │   └── src/
 │       └── pico_fota_bootloader.c
 └── pico_sdk_import.cmake
@@ -71,20 +89,27 @@ add_executable(your_app
 target_link_libraries(your_app
                       pico_stdlib
                       pico_fota_bootloader_lib)
-target_link_options(your_app PRIVATE "-L${CMAKE_CURRENT_SOURCE_DIR}/pico_fota_bootloader/linker_common")
-pico_set_linker_script(your_app ${CMAKE_CURRENT_SOURCE_DIR}/pico_fota_bootloader/linker_common/application.ld)
+pfb_compile_with_bootloader(your_app)
 # rest of the file if needed...
 ```
 
 ### your_project/main.c
 ```c
-#include "pico_fota_bootloader.h"
+#include <pico_fota_bootloader.h>
 ...
 int main() {
     ...
     if (pfb_is_after_firmware_update()) {
         // handle new firmare info if needed
     }
+    if (pfb_is_after_rollback()) {
+        // handle performed rollback if needed
+    }
+    ...
+
+    // commit the new firmware - otherwise after the next reboot the rollback
+    // will be performed
+    pfb_firmware_commit();
     ...
 
     // initialize download slot before writing into it
@@ -94,21 +119,26 @@ int main() {
     // acquire the data (e.g. from the web) and write it into the download slot
     // using chunks of N*256 bytes
     for (int i = 0; i < size; i++) {
-        (void) pfb_write_to_flash_aligned_256_bytes(src, offset_bytes, len_bytes);
+        if (pfb_write_to_flash_aligned_256_bytes(src, offset_bytes, len_bytes)) {
+            // handle error if needed
+            break;
+        }
     }
     ...
 
-    // after downloading the binary, mark the download slot as valid - the
-    // firmware will be swapped after a reboot
+    // once the binary file has been successfully downloaded, mark the download
+    // slot as valid - the firmware will be swapped after a reboot
     pfb_mark_download_slot_as_valid();
     ...
 
     // when you're ready - reboot and perform the upgrade
     pfb_perform_update();
+
+    /* code unreachable */
 }
 ```
 
-## Compiling and running - example
+## Compiling and running (example)
 
 ### Compiling
 

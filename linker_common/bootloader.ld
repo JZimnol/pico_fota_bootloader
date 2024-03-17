@@ -4,11 +4,11 @@ INCLUDE linker_definitions.ld
 
 MEMORY
 {
-    BOOTLOADER_FLASH(rx) : ORIGIN = __FLASH_START_ADDRESS, LENGTH = __BOOTLOADER_LENGTH
-    FLASH_INFO(rx) : ORIGIN = __FLASH_INFO_START_ADDRESS, LENGTH = __FLASH_INFO_LENGTH
+    BOOTLOADER_FLASH(rx) : ORIGIN = __FLASH_START, LENGTH = __BOOTLOADER_LENGTH
+    FLASH_INFO(rx) : ORIGIN = __FLASH_INFO_START, LENGTH = __FLASH_INFO_LENGTH
     /*
-    FLASH_APP(rx) : ORIGIN = __FLASH_APP_START_ADDRESS, LENGTH = __FLASH_SLOT_LENGTH
-    FLASH_DOWNLOAD_SLOT(rx) : ORIGIN = __FLASH_DOWNLOAD_SLOT_START_ADDRESS, LENGTH = __FLASH_SLOT_LENGTH
+    FLASH_APP(rx) : ORIGIN = __FLASH_APP_START, LENGTH = __FLASH_SLOT_LENGTH
+    FLASH_DOWNLOAD_SLOT(rx) : ORIGIN = __FLASH_DOWNLOAD_SLOT_START, LENGTH = __FLASH_SLOT_LENGTH
     */
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
@@ -74,18 +74,36 @@ SECTIONS
     } > BOOTLOADER_FLASH
 
     .flash_info : {
-        __flash_info_app_vtor_addr = .;
-        LONG(__FLASH_APP_START_ADDRESS)
-        . = . + 256 - 4; /* keep each fragment 256 bytes away */
-        __flash_info_download_vtor_addr = .;
-        LONG(__FLASH_DOWNLOAD_SLOT_START_ADDRESS)
-        . = . + 256 - 4; /* keep each fragment 256 bytes away */
-        __flash_info_download_valid_addr = .;
-        LONG(0x00000000) /* after flashing bootloader, download slot is invalid */
-        . = . + 256 - 4; /* keep each fragment 256 bytes away */
-        __flash_info_firmware_is_swapped = .;
-        LONG(0x00000000) /* after flashing bootloader, firmware has not yet been swapped */
+        __flash_info_app_vtor = .;
+        LONG(__FLASH_APP_START)
+        __flash_info_download_slot_vtor = .;
+        LONG(__FLASH_DOWNLOAD_SLOT_START)
+        __flash_info_is_download_slot_valid = .;
+        /* after flashing bootloader, download slot is invalid */
+        LONG(0x00000000)
+        __flash_info_is_firmware_is_swapped = .;
+        /* after flashing bootloader, firmware has not yet been swapped */
+        LONG(0x00000000)
+        __flash_info_is_after_rollback = .;
+        /* after flashing bootloader, app is not affter a rollback */
+        LONG(0x00000000)
+        __flash_info_should_rollback = .;
+        /* after flashing bootloader, rollback shouldn't be performed */
+        LONG(0x00000000)
     } > FLASH_INFO
+
+    ASSERT(__flash_info_app_vtor == __FLASH_INFO_APP_HEADER,
+            "__FLASH_INFO_APP_HEADER definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_download_slot_vtor == __FLASH_INFO_DOWNLOAD_HEADER,
+            "__FLASH_INFO_DOWNLOAD_HEADER definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_is_download_slot_valid == __FLASH_INFO_IS_DOWNLOAD_SLOT_VALID,
+            "__FLASH_INFO_IS_DOWNLOAD_SLOT_VALID definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_is_firmware_is_swapped == __FLASH_INFO_IS_FIRMWARE_SWAPPED,
+            "__FLASH_INFO_IS_FIRMWARE_SWAPPED definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_is_after_rollback == __FLASH_INFO_IS_AFTER_ROLLBACK,
+            "__FLASH_INFO_IS_AFTER_ROLLBACK definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_should_rollback == __FLASH_INFO_SHOULD_ROLLBACK,
+            "__FLASH_INFO_SHOULD_ROLLBACK definition in linker_definitions.ld file is not valid")
 
     .rodata : {
         *(EXCLUDE_FILE(*libgcc.a: *libc.a:*lib_a-mem*.o *libm.a:) .rodata*)
@@ -245,7 +263,6 @@ SECTIONS
 
     /* Check if data + heap + stack exceeds RAM limit */
     ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed")
-
     ASSERT( __binary_info_header_end - __logical_binary_start <= 256, "Binary info must be in first 256 bytes of the binary")
     /* todo assert on extra code */
 }

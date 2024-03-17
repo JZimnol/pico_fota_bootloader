@@ -23,42 +23,61 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "RP2040.h"
-#include "hardware/flash.h"
-#include "hardware/resets.h"
-#include "hardware/sync.h"
-#include "pico/stdlib.h"
+#include <RP2040.h>
+#include <hardware/flash.h>
+#include <hardware/resets.h>
+#include <hardware/sync.h>
+#include <pico/stdlib.h>
 
-#include "pico_fota_bootloader.h"
+#include <pico_fota_bootloader.h>
 
-extern uint32_t __flash_info_app_vtor_addr;
-extern uint32_t __FLASH_INFO_DOWNLOAD_VALID_ADDRESS;
-extern uint32_t __FLASH_DOWNLOAD_SLOT_START_ADDRESS;
-extern uint32_t __FLASH_APP_START_ADDRESS;
-extern uint32_t __FLASH_SWAP_SPACE_LENGTH;
+#include "linker_common/linker_definitions.h"
 
-static bool has_firmware_to_swap(void) {
-    return (__FLASH_INFO_DOWNLOAD_VALID_ADDRESS == PFB_SLOT_IS_VALID_MAGIC);
-}
+#ifdef WITH_BOOTLOADER_LOGS
+#define BOOTLOADER_LOG(...) puts("[BOOTLAODER] " __VA_ARGS__)
+#else // WITH_BOOTLOADER_LOGS
+#define BOOTLOADER_LOG(...) ((void)0)
+#endif // WITH_BOOTLOADER_LOGS
+
+void _pfb_mark_pico_has_new_firmware(void);
+void _pfb_mark_pico_has_no_new_firmware(void);
+void _pfb_mark_is_after_rollback(void);
+void _pfb_mark_is_not_after_rollback(void);
+bool _pfb_should_rollback(void);
+void _pfb_mark_should_rollback(void);
+bool _pfb_has_firmware_to_swap(void);
 
 static void swap_images(void) {
-    uint8_t swap_buff[FLASH_SECTOR_SIZE];
-    const uint32_t SWAP_LEN = PFB_VALUE_AS_U32(__FLASH_SWAP_SPACE_LENGTH);
-    const uint32_t SWAP_ITERATIONS = SWAP_LEN / FLASH_SECTOR_SIZE;
+    uint8_t swap_buff_from_downlaod_slot[FLASH_SECTOR_SIZE];
+    uint8_t swap_buff_from_application_slot[FLASH_SECTOR_SIZE];
+    const uint32_t SWAP_ITERATIONS =
+            PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH) / FLASH_SECTOR_SIZE;
 
     uint32_t saved_interrupts = save_and_disable_interrupts();
-    flash_range_erase(PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                              __FLASH_APP_START_ADDRESS),
-                      SWAP_LEN);
     for (uint32_t i = 0; i < SWAP_ITERATIONS; i++) {
-        memcpy(swap_buff,
-               (void *) (PFB_VALUE_AS_U32(__FLASH_DOWNLOAD_SLOT_START_ADDRESS)
+        memcpy(swap_buff_from_downlaod_slot,
+               (void *) (PFB_ADDR_AS_U32(__FLASH_DOWNLOAD_SLOT_START)
                          + i * FLASH_SECTOR_SIZE),
                FLASH_SECTOR_SIZE);
-        flash_range_program(PFB_VALUE_WITH_XIP_OFFSET_AS_U32(
-                                    __FLASH_APP_START_ADDRESS)
+        memcpy(swap_buff_from_application_slot,
+               (void *) (PFB_ADDR_AS_U32(__FLASH_APP_START)
+                         + i * FLASH_SECTOR_SIZE),
+               FLASH_SECTOR_SIZE);
+        flash_range_erase(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_APP_START)
+                                  + i * FLASH_SECTOR_SIZE,
+                          FLASH_SECTOR_SIZE);
+        flash_range_erase(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(
+                                  __FLASH_DOWNLOAD_SLOT_START)
+                                  + i * FLASH_SECTOR_SIZE,
+                          FLASH_SECTOR_SIZE);
+        flash_range_program(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_APP_START)
                                     + i * FLASH_SECTOR_SIZE,
-                            swap_buff,
+                            swap_buff_from_downlaod_slot,
+                            FLASH_SECTOR_SIZE);
+        flash_range_program(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(
+                                    __FLASH_DOWNLOAD_SLOT_START)
+                                    + i * FLASH_SECTOR_SIZE,
+                            swap_buff_from_application_slot,
                             FLASH_SECTOR_SIZE);
     }
     restore_interrupts(saved_interrupts);
@@ -90,6 +109,7 @@ static void jump_to_vtor(uint32_t vtor) {
 }
 
 static void print_welcome_message(void) {
+#ifdef WITH_BOOTLOADER_LOGS
     puts("");
     puts("***********************************************************");
     puts("*                                                         *");
@@ -98,6 +118,7 @@ static void print_welcome_message(void) {
     puts("*                                                         *");
     puts("***********************************************************");
     puts("");
+#endif // WITH_BOOTLOADER_LOGS
 }
 
 int main(void) {
@@ -106,24 +127,34 @@ int main(void) {
 
     print_welcome_message();
 
-    if (has_firmware_to_swap()) {
-        puts("[BOOTLOADER] Swapping images");
+    if (_pfb_should_rollback()) {
+        BOOTLOADER_LOG("Rolling back to the previous firmware");
         sleep_ms(10);
         swap_images();
-        _pfb_notify_pico_has_new_firmware();
-    } else {
-        puts("[BOOTLOADER] Nothing to swap");
+        pfb_firmware_commit();
+        _pfb_mark_pico_has_no_new_firmware();
+        _pfb_mark_is_after_rollback();
+    } else if (_pfb_has_firmware_to_swap()) {
+        BOOTLOADER_LOG("Swapping images");
         sleep_ms(10);
-        _pfb_notify_pico_has_no_new_firmware();
+        swap_images();
+        _pfb_mark_pico_has_new_firmware();
+        _pfb_mark_is_not_after_rollback();
+        _pfb_mark_should_rollback();
+    } else {
+        BOOTLOADER_LOG("Nothing to swap");
+        sleep_ms(10);
+        pfb_firmware_commit();
+        _pfb_mark_pico_has_no_new_firmware();
     }
 
     pfb_mark_download_slot_as_invalid();
-    puts("[BOOTLOADER] End of execution, executing the application...\n");
+    BOOTLOADER_LOG("End of execution, executing the application...\n");
     sleep_ms(10);
 
     disable_interrupts();
     reset_peripherals();
-    jump_to_vtor(__flash_info_app_vtor_addr);
+    jump_to_vtor(__flash_info_app_vtor);
 
     return 0;
 }
