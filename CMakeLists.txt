@@ -21,6 +21,37 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+########################################
+# CMake options
+########################################
+option(PFB_WITH_BOOTLOADER_LOGS "Enables logging messages from the bootloader using stdio" ON)
+option(PFB_REDIRECT_BOOTLOADER_LOGS_TO_UART "Redirects bootloader's logs from USB to UART" OFF)
+option(PFB_WITH_IMAGE_ENCRYPTION "Enables image encryption using AES ECB algorithm" ON)
+option(PFB_AES_KEY "AES key used for image encryption and decryption")
+option(PFB_WITH_SHA256_HASHING "Enables image SHA256 appending and checking" ON)
+
+########################################
+# Check and set AES key
+########################################
+if (PFB_WITH_IMAGE_ENCRYPTION)
+    if (NOT PFB_AES_KEY)
+        set(PFB_AES_KEY "default")
+        message(WARNING "AES key has been set to: \"${PFB_AES_KEY}\"")
+    endif ()
+    message(STATUS "AES key: ${PFB_AES_KEY}")
+    string(REGEX MATCH "^[0-9a-zA-Z]+" aes_key_match ${PFB_AES_KEY})
+    string(LENGTH ${PFB_AES_KEY} aes_key_length)
+    if ((NOT ${PFB_AES_KEY} STREQUAL ${aes_key_match}) OR (${aes_key_length} GREATER 32))
+        message(FATAL_ERROR
+                "AES key must be 32 bytes long and contain only characters from the set [0-9a-zA-Z].")
+    endif ()
+    math(EXPR num_zeros_needed "32 - ${aes_key_length}")
+    string(REPEAT "x" ${num_zeros_needed} XS)
+    string(CONCAT PFB_AES_KEY ${PFB_AES_KEY} ${XS})
+    message(STATUS "AES key padded to 32 characters: ${PFB_AES_KEY}")
+    set(PFB_AES_KEY_GLOBAL ${PFB_AES_KEY} PARENT_SCOPE)
+endif()
+
 ################################################################################
 # Define the pico_fota_bootloader_lib library
 ################################################################################
@@ -36,38 +67,61 @@ target_link_libraries(pico_fota_bootloader_lib PUBLIC
 target_link_options(pico_fota_bootloader_lib PRIVATE
                     "-T${CMAKE_CURRENT_SOURCE_DIR}/linker_common/linker_definitions.ld")
 
-set(PFB_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
+if (PFB_WITH_IMAGE_ENCRYPTION)
+    target_compile_definitions(pico_fota_bootloader_lib PRIVATE PFB_WITH_IMAGE_ENCRYPTION)
+    target_compile_definitions(pico_fota_bootloader_lib PRIVATE PFB_AES_KEY=\"${PFB_AES_KEY}\")
+endif ()
+if (PFB_WITH_SHA256_HASHING)
+    target_compile_definitions(pico_fota_bootloader_lib PRIVATE PFB_WITH_SHA256_HASHING)
+endif ()
 
-# Enable the bootloader to be compiled with the application, set the proper
-# application's linker script and append SHA256 at the end of the binary
+set(BOOTLOADER_DIR_GLOBAL ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
+
+########################################
+# Manage application binary
+########################################
 function(pfb_compile_with_bootloader Target)
-    target_link_options(${Target} PRIVATE "-L${PFB_DIRECTORY}/linker_common")
-    pico_set_linker_script(${Target} ${PFB_DIRECTORY}/linker_common/application.ld)
-    _pfb_append_with_sha256(${Target})
-endfunction()
+    target_link_options(${Target} PRIVATE "-L${BOOTLOADER_DIR_GLOBAL}/linker_common")
+    pico_set_linker_script(${Target} ${BOOTLOADER_DIR_GLOBAL}/linker_common/application.ld)
 
-# append SHA256 at the end of the binary
-function(_pfb_append_with_sha256 Target)
-    find_package(Python COMPONENTS Interpreter REQUIRED)
-    if (NOT Python_Interpreter_FOUND)
-        message(FATAL_ERROR "Python interpreter not found and is required for SHA256 appending.")
+    if (PFB_WITH_SHA256_HASHING OR PFB_WITH_IMAGE_ENCRYPTION)
+        find_package(Python COMPONENTS Interpreter REQUIRED)
+        if (NOT Python_Interpreter_FOUND)
+            message(FATAL_ERROR
+                "Python interpreter not found and is required for SHA256 appending and AES image encryption")
+        endif ()
     endif ()
 
     add_custom_command(
         TARGET ${Target}
         POST_BUILD
-        # NOTE: without manually creating a .bin file, the file won't exist at the time of the command execution
-        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${Target}> $<TARGET_PROPERTY:${Target},NAME>.bin
-        COMMAND ${Python_EXECUTABLE} ${PFB_DIRECTORY}/scripts/sha256_append.py --target-file "$<TARGET_PROPERTY:${Target},NAME>.bin"
-        COMMENT "Appending FOTA file with SHA256...")
-endfunction ()
+        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${Target}>
+                                           $<TARGET_PROPERTY:${Target},NAME>_fota_image.bin)
+
+    if (PFB_WITH_SHA256_HASHING)
+        add_custom_command(
+            TARGET ${Target}
+            POST_BUILD
+            COMMAND ${Python_EXECUTABLE} ${BOOTLOADER_DIR_GLOBAL}/scripts/sha256_append.py
+                --target-file "$<TARGET_PROPERTY:${Target},NAME>_fota_image.bin"
+            COMMENT "Appending encrypted FOTA file with SHA256...")
+    endif ()
+    if (PFB_WITH_IMAGE_ENCRYPTION)
+        add_custom_command(
+            TARGET ${Target}
+            POST_BUILD
+            COMMAND ${Python_EXECUTABLE} ${BOOTLOADER_DIR_GLOBAL}/scripts/aes_encrypt.py
+                --target-file "$<TARGET_PROPERTY:${Target},NAME>_fota_image.bin"
+                --aes-key ${PFB_AES_KEY_GLOBAL}
+            COMMENT "Encrypting FOTA image using AES...")
+    endif ()
+endfunction()
 
 ################################################################################
 # Create bootloader binary
 ################################################################################
 add_executable(pico_fota_bootloader
                bootloader.c)
-
 target_link_libraries(pico_fota_bootloader
                       hardware_structs
                       hardware_resets
@@ -86,13 +140,14 @@ target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/
 target_link_options(pico_fota_bootloader PRIVATE "LINKER:--gc-sections")
 
 pico_set_linker_script(pico_fota_bootloader ${CMAKE_CURRENT_SOURCE_DIR}/linker_common/bootloader.ld)
+pico_add_extra_outputs(pico_fota_bootloader)
 
-option(WITH_BOOTLOADER_LOGS "Enables logging messages from the bootloader to stdio" ON)
-option(REDIRECT_BOOTLOADER_LOGS_TO_UART "Redirects bootloader's logs from USB to UART" OFF)
-
-if (WITH_BOOTLOADER_LOGS)
-    target_compile_definitions(pico_fota_bootloader PRIVATE WITH_BOOTLOADER_LOGS)
-    if (REDIRECT_BOOTLOADER_LOGS_TO_UART)
+########################################
+# Manage bootloader's logs
+########################################
+if (PFB_WITH_BOOTLOADER_LOGS)
+    target_compile_definitions(pico_fota_bootloader PRIVATE PFB_WITH_BOOTLOADER_LOGS)
+    if (PFB_REDIRECT_BOOTLOADER_LOGS_TO_UART)
         pico_enable_stdio_usb(pico_fota_bootloader 0)
         pico_enable_stdio_uart(pico_fota_bootloader 1)
     else ()
@@ -101,4 +156,3 @@ if (WITH_BOOTLOADER_LOGS)
     endif ()
 endif ()
 
-pico_add_extra_outputs(pico_fota_bootloader)

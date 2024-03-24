@@ -33,15 +33,15 @@
 
 #include "linker_common/linker_definitions.h"
 
-#ifdef WITH_BOOTLOADER_LOGS
+#ifdef PFB_WITH_BOOTLOADER_LOGS
 #    define BOOTLOADER_LOG(...)                \
         do {                                   \
             puts("[BOOTLOADER] " __VA_ARGS__); \
             sleep_ms(5);                       \
         } while (0)
-#else // WITH_BOOTLOADER_LOGS
+#else // PFB_WITH_BOOTLOADER_LOGS
 #    define BOOTLOADER_LOG(...) ((void) 0)
-#endif // WITH_BOOTLOADER_LOGS
+#endif // PFB_WITH_BOOTLOADER_LOGS
 
 void _pfb_mark_pico_has_new_firmware(void);
 void _pfb_mark_pico_has_no_new_firmware(void);
@@ -113,7 +113,7 @@ static void jump_to_vtor(uint32_t vtor) {
 }
 
 static void print_welcome_message(void) {
-#ifdef WITH_BOOTLOADER_LOGS
+#ifdef PFB_WITH_BOOTLOADER_LOGS
     puts("");
     puts("***********************************************************");
     puts("*                                                         *");
@@ -122,7 +122,7 @@ static void print_welcome_message(void) {
     puts("*                                                         *");
     puts("***********************************************************");
     puts("");
-#endif // WITH_BOOTLOADER_LOGS
+#endif // PFB_WITH_BOOTLOADER_LOGS
 }
 
 int main(void) {

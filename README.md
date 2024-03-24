@@ -1,8 +1,8 @@
 # Raspberry Pi Pico W FOTA Bootloader
 
-This bootloader allows you to perform `Firmware Over The Air (FOTA)` updates
-with the Raspberry Pi Pico W board. It contains all required linker scripts
-that will adapt your application to the new application memory layout.
+This bootloader allows you to perform secure `Firmware Over The Air (FOTA)`
+OTA updates with the Raspberry Pi Pico W board. It contains all required linker
+scripts that will adapt your application to the new application memory layout.
 
 The memory layout is as follows:
 
@@ -38,30 +38,59 @@ The memory layout is as follows:
 
 `pico_fota_bootloader` supports the following features:
 
-- rollback mechanism - if the freshly downloaded firmware won't be committed
-  before the very next reboot, the bootloader will perform the rollback (the
-  firmware will be swapped back to the previous working version)
+- **SHA256 calculation**- application binary FOTA image is appended with a
+  SHA256 value
 
-- SHA256 calculation - application binary image (`<app_name>_fota_image.bin`) is
-  appended with a SHA256 value
+  - as a result, the `<app_name>_fota_image.bin` binary file will be appended
+    with 256 bytes from which last 32 bytes will contain SHA256 of the image
 
-  - after downloading a binary file, the user can use
+  - after downloading a binary file, the user can use the
     `pfb_firmware_sha256_check` function to check if the calculated SHA256
     matches the expected one
 
+  - this option can be disabled using `-DPFB_WITH_SHA256_HASHING=OFF` CMake
+    option
+
   - see the [example](#your_projectmainc) for more information
 
-- basic debug logging - enabled by default, can be turned off using
-  `-DWITH_BOOTLOADER_LOGS=OFF` cmake option
+- **image encryption** - application binary FOTA image is encrypted using AES
+  ECB algorithm
+
+  - encryption/decryption key should be set using `-DPFB_AES_KEY=<value>` CMake
+    option
+
+      - both the bootloader and the future FOTA images should be compiled using
+        the same key value, otherwise the bootloader won't be able to properly
+        decrypt the FOTA image
+
+  - as a result, the `<app_name>_fota_image_encrypted.bin` file will be created
+
+    - if `PFB_WITH_SHA256_HASHING` has been enabled, a SHA256 will also be
+      encrypted with the firmware image
+
+  - this option can be disabled using `-DPFB_WITH_IMAGE_ENCRYPTION=OFF` CMake
+    option
+
+- **rollback mechanism** - if the freshly downloaded firmware won't be committed
+  before the very next reboot, the bootloader will perform the rollback (the
+  firmware will be swapped back to the previous working version)
+
+- **basic debug logging** - enabled by default, can be turned off using
+  `-DPFB_WITH_BOOTLOADER_LOGS=OFF` CMake option
 
   - debug logs can be redirected from USB to UART using
-    `-DREDIRECT_BOOTLOADER_LOGS_TO_UART=ON` cmake option
+    `-DPFB_REDIRECT_BOOTLOADER_LOGS_TO_UART=ON` CMake option
 
 ## Prerequisites
 
 - `pico-sdk` version `>= 1.5.1`
 
-- `Python 3` with the following packages: `argparse`, `hashlib`, `os`
+  - required for the `pico_mbedtls` library
+
+- `Python 3` with the following packages: `argparse`, `hashlib`, `os`,
+  `Crypto.Cipher`
+
+  - required for the SHA256 calculation and AES ECB image encryption
 
 # Example
 
@@ -78,14 +107,11 @@ your_project/
 │   │   └── pico_fota_bootloader.h
 │   ├── linker_common/
 │   │   ├── application.ld
-│   │   ├── bootloader.ld
-│   │   ├── linker_definitions.h
-│   │   └── linker_definitions.ld
+│   │   └── ...
 │   ├── bootloader.c
 │   └── src/
 │       └── pico_fota_bootloader.c
 └── pico_sdk_import.cmake
-
 ```
 
 The following files should have the following contents:
@@ -109,6 +135,7 @@ target_link_libraries(your_app
                       pico_stdlib
                       pico_fota_bootloader_lib)
 pfb_compile_with_bootloader(your_app)
+pico_add_extra_outputs(your_app)
 # rest of the file if needed...
 ```
 
@@ -150,6 +177,7 @@ int main() {
         // handle the SHA256 error/mismatch if needed
         while (1);
     }
+
     // once the binary file has been successfully downloaded, mark the download
     // slot as valid - the firmware will be swapped after a reboot
     pfb_mark_download_slot_as_valid();
@@ -172,25 +200,25 @@ Create the build directory and build the project within it.
 # these commands may vary depending on the OS
 mkdir build/
 cd build
-cmake .. && make -j
+cmake -DPFB_AES_KEY="<your_key_value>" .. && make -j
 ```
 
 You should have output similar to:
 
 ```
 build/
+├── pico_fota_bootloader
+│   ├── CMakeFiles
+│   ├── cmake_install.cmake
+│   ├── libpico_fota_bootloader_lib.a
+│   ├── Makefile
+│   ├── pico_fota_bootloader.bin
+│   ├── pico_fota_bootloader.dis
+│   ├── pico_fota_bootloader.elf
+│   ├── pico_fota_bootloader.elf.map
+│   ├── pico_fota_bootloader.hex
+│   └── pico_fota_bootloader.uf2
 └── your_app
-    ├── pico_fota_bootloader
-    │   ├── CMakeFiles
-    │   ├── cmake_install.cmake
-    │   ├── libpico_fota_bootloader_lib.a
-    │   ├── Makefile
-    │   ├── pico_fota_bootloader.bin
-    │   ├── pico_fota_bootloader.dis
-    │   ├── pico_fota_bootloader.elf
-    │   ├── pico_fota_bootloader.elf.map
-    │   ├── pico_fota_bootloader.hex
-    │   └── pico_fota_bootloader.uf2
     ├── CMakeFiles
     ├── cmake_install.cmake
     ├── Makefile
@@ -199,6 +227,7 @@ build/
     ├── your_app.elf
     ├── your_app.elf.map
     ├── your_app_fota_image.bin
+    ├── your_app_fota_image_encrypted.bin
     ├── your_app.hex
     └── your_app.uf2
 ```
@@ -215,9 +244,11 @@ application.
 **NOTE:** you can also look at the serial output logs to monitor the
 application state.
 
-### Performing firmware update
+### Performing the firmware update (OTA)
 
-To perform a firmware update (over the air), a `your_app_fota_image.bin` file
-should be sent to or downloaded by the Pico W. Note that while rebuilding the
+To perform a firmware update (over the air), a
+`your_app_fota_image_encrypted.bin` file (or `your_app_fota_image.bin` file in
+case of setting the `-DPFB_WITH_IMAGE_ENCRYPTION=OFF` CMake option) should be
+sent to or downloaded by the Pico W. Note that while rebuilding the
 application, the linker scripts' contents should not be changed or should be
 changed carefully to maintain the memory layout backward compatibility.

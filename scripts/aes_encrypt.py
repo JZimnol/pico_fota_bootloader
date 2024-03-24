@@ -21,35 +21,51 @@
 #
 
 from argparse import ArgumentParser
-from hashlib import sha256
+from Crypto.Cipher import AES
 import os
 
 
+def encrypt(key, data):
+    cipher = AES.new(key.encode('utf-8'), AES.MODE_ECB)
+    return cipher.encrypt(data)
+
+
 def _main():
-    parser = ArgumentParser(
-        description='Append SHA256 hash to the end of the firmware file thath will be sent to the device.')
+    parser = ArgumentParser(description='Encrypt a binary file with AES ECB algorithm.')
     parser.add_argument('-t', '--target-file', help='Path to the firmware file', required=True)
+    parser.add_argument('-k', '--aes-key', help='AES key used for encryption', required=True)
 
     args = parser.parse_args()
 
+    aes_key = args.aes_key
     binary_file_path = args.target_file
 
+    if (len(aes_key) != 32):
+        raise ValueError("AES: key must be 32 characters long")
     if not os.path.exists(binary_file_path):
-        raise FileNotFoundError(f"SHA256: file {binary_file_path} does not exist")
+        raise FileNotFoundError(f"AES: file {binary_file_path} does not exist")
     if not binary_file_path.endswith('.bin'):
-        raise ValueError(f"SHA256: file {binary_file_path} is not a binary file")
+        raise ValueError(f"AES: file {binary_file_path} is not a binary file")
 
-    print(f"SHA256: using binary: {binary_file_path}")
+    file_path_no_ext = binary_file_path.rsplit('.', 1)[0]
+    output_file_path = file_path_no_ext + "_encrypted" + '.bin'
+
+    print(f"AES: using binary: {binary_file_path}")
+    print(f"AES: using key: {aes_key}")
+
+    try:
+        os.remove(output_file_path)
+    except FileNotFoundError:
+        pass
 
     with open(binary_file_path, 'rb') as file:
         binary_file_data = file.read()
 
-    binary_sha256 = sha256(binary_file_data)
+    encrypted_binary_data = encrypt(aes_key, binary_file_data)
+    with open(output_file_path, 'wb') as file:
+        file.write(encrypted_binary_data)
 
-    with open(binary_file_path, '+ab') as file:
-        padding = b'\x00' * (256 - 32)
-        file.write(padding)
-        file.write(binary_sha256.digest())
+    print(f"AES: output path: {output_file_path}")
 
 
 if __name__ == '__main__':

@@ -28,7 +28,12 @@
 #include <hardware/sync.h>
 #include <hardware/watchdog.h>
 
-#include <mbedtls/sha256.h>
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+#    include <mbedtls/aes.h>
+#endif // PFB_WITH_IMAGE_ENCRYPTION
+#ifdef PFB_WITH_SHA256_HASHING
+#    include <mbedtls/sha256.h>
+#endif // PFB_WITH_SHA256_HASHING
 
 #include <pico_fota_bootloader.h>
 
@@ -49,7 +54,12 @@
 #define PFB_SHOULD_ROLLBACK_MAGIC 0xdeadead
 #define PFB_SHOULD_NOT_ROLLBACK_MAGIC 0x00000000
 
-#define SHA256_DIGEST_SIZE 32
+#define PFB_SHA256_DIGEST_SIZE 32
+#define PFB_AES_BLOCK_SIZE 16
+
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+mbedtls_aes_context g_aes_ctx;
+#endif // PFB_WITH_IMAGE_ENCRYPTION
 
 static inline void erase_flash_info_partition_isr_unsafe(void) {
     flash_range_erase(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_INFO_START),
@@ -112,8 +122,22 @@ static void mark_if_is_after_rollback(uint32_t magic) {
 
 static void *get_image_sha256_address(size_t image_size) {
     return (void *) (PFB_ADDR_AS_U32(__FLASH_DOWNLOAD_SLOT_START) + image_size
-                     - SHA256_DIGEST_SIZE);
+                     - PFB_SHA256_DIGEST_SIZE);
 }
+
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+static int decrypt_256_bytes(const uint8_t *src, uint8_t *out_dest) {
+    for (int i = 0; i < PFB_ALIGN_SIZE / PFB_AES_BLOCK_SIZE; i++) {
+        int ret = mbedtls_aes_crypt_ecb(&g_aes_ctx, MBEDTLS_AES_DECRYPT,
+                                        src + i * PFB_AES_BLOCK_SIZE,
+                                        out_dest + i * PFB_AES_BLOCK_SIZE);
+        if (ret) {
+            return ret;
+        }
+    }
+    return 0;
+}
+#endif // PFB_WITH_IMAGE_ENCRYPTION
 
 void pfb_mark_download_slot_as_valid(void) {
     mark_download_slot(PFB_SHOULD_SWAP_MAGIC);
@@ -136,17 +160,31 @@ int pfb_write_to_flash_aligned_256_bytes(uint8_t *src,
         return 1;
     }
 
-    uint32_t dest_address =
-            PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_DOWNLOAD_SLOT_START)
-            + offset_bytes;
-    uint32_t saved_interrupts = save_and_disable_interrupts();
-    flash_range_program(dest_address, src, len_bytes);
-    restore_interrupts(saved_interrupts);
-
+    for (int i = 0; i < len_bytes / PFB_ALIGN_SIZE; i++) {
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+        unsigned char output_aes_dec[PFB_ALIGN_SIZE];
+        int ret = decrypt_256_bytes(src + i * PFB_ALIGN_SIZE, output_aes_dec);
+        if (ret) {
+            return ret;
+        }
+#endif // PFB_WITH_IMAGE_ENCRYPTION
+        uint32_t dest_address =
+                PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_DOWNLOAD_SLOT_START)
+                + offset_bytes + i * PFB_ALIGN_SIZE;
+        uint8_t *src_address =
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+                output_aes_dec;
+#else  // PFB_WITH_IMAGE_ENCRYPTION
+                src + i * PFB_ALIGN_SIZE;
+#endif // PFB_WITH_IMAGE_ENCRYPTION
+        uint32_t saved_interrupts = save_and_disable_interrupts();
+        flash_range_program(dest_address, src_address, PFB_ALIGN_SIZE);
+        restore_interrupts(saved_interrupts);
+    }
     return 0;
 }
 
-void pfb_initialize_download_slot(void) {
+int pfb_initialize_download_slot(void) {
     uint32_t erase_len = PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH);
     uint32_t erase_address_with_xip_offset =
             PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_DOWNLOAD_SLOT_START);
@@ -157,9 +195,24 @@ void pfb_initialize_download_slot(void) {
     uint32_t saved_interrupts = save_and_disable_interrupts();
     flash_range_erase(erase_address_with_xip_offset, erase_len);
     restore_interrupts(saved_interrupts);
+
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+    mbedtls_aes_free(&g_aes_ctx);
+    mbedtls_aes_init(&g_aes_ctx);
+    int ret = mbedtls_aes_setkey_dec(&g_aes_ctx, PFB_AES_KEY,
+                                     strlen(PFB_AES_KEY) * 8);
+    if (ret) {
+        return ret;
+    }
+#endif // PFB_WITH_IMAGE_ENCRYPTION
+
+    return 0;
 }
 
 void pfb_perform_update(void) {
+#ifdef PFB_WITH_IMAGE_ENCRYPTION
+    mbedtls_aes_free(&g_aes_ctx);
+#endif // PFB_WITH_IMAGE_ENCRYPTION
     watchdog_enable(1, 1);
     while (1)
         ;
@@ -174,42 +227,45 @@ bool pfb_is_after_rollback(void) {
 }
 
 int pfb_firmware_sha256_check(size_t firmware_size) {
-    if (firmware_size % PFB_ALIGN_SIZE) {
+#ifdef PFB_WITH_SHA256_HASHING
+    if (firmware_size % PFB_ALIGN_SIZE || firmware_size < PFB_ALIGN_SIZE) {
         return 1;
     }
 
-    mbedtls_sha256_context ctx;
-    mbedtls_sha256_init(&ctx);
+    mbedtls_sha256_context sha256_ctx;
+    mbedtls_sha256_init(&sha256_ctx);
 
     int ret;
-    ret = mbedtls_sha256_starts_ret(&ctx, 0);
+    ret = mbedtls_sha256_starts_ret(&sha256_ctx, 0);
     if (ret) {
         return ret;
     }
 
     uint32_t image_start_address = PFB_ADDR_AS_U32(__FLASH_DOWNLOAD_SLOT_START);
     size_t image_size_without_sha256 = firmware_size - 256;
-    ret = mbedtls_sha256_update_ret(&ctx,
+    ret = mbedtls_sha256_update_ret(&sha256_ctx,
                                     (const unsigned char *) image_start_address,
                                     image_size_without_sha256);
     if (ret) {
         return ret;
     }
 
-    unsigned char calculated_sha256[SHA256_DIGEST_SIZE];
-    ret = mbedtls_sha256_finish_ret(&ctx, calculated_sha256);
+    unsigned char calculated_sha256[PFB_SHA256_DIGEST_SIZE];
+    ret = mbedtls_sha256_finish_ret(&sha256_ctx, calculated_sha256);
     if (ret) {
         return ret;
     }
 
-    mbedtls_sha256_free(&ctx);
+    mbedtls_sha256_free(&sha256_ctx);
 
     void *image_sha256_address = get_image_sha256_address(firmware_size);
-    if (memcmp(calculated_sha256, image_sha256_address, SHA256_DIGEST_SIZE)
+    if (memcmp(calculated_sha256, image_sha256_address, PFB_SHA256_DIGEST_SIZE)
         != 0) {
         return 1;
     }
-
+#endif // PFB_WITH_SHA256_HASHING
+    (void) firmware_size;
+    
     return 0;
 }
 
