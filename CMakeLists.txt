@@ -21,7 +21,9 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+################################################################################
 # Define the pico_fota_bootloader_lib library
+################################################################################
 add_library(pico_fota_bootloader_lib STATIC
             src/pico_fota_bootloader.c)
 target_include_directories(pico_fota_bootloader_lib PUBLIC
@@ -29,11 +31,40 @@ target_include_directories(pico_fota_bootloader_lib PUBLIC
 target_link_libraries(pico_fota_bootloader_lib PUBLIC
                       hardware_watchdog
                       pico_stdlib
+                      pico_mbedtls
                       hardware_flash)
 target_link_options(pico_fota_bootloader_lib PRIVATE
                     "-T${CMAKE_CURRENT_SOURCE_DIR}/linker_common/linker_definitions.ld")
 
+set(PFB_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
+
+# Enable the bootloader to be compiled with the application, set the proper
+# application's linker script and append SHA256 at the end of the binary
+function(pfb_compile_with_bootloader Target)
+    target_link_options(${Target} PRIVATE "-L${PFB_DIRECTORY}/linker_common")
+    pico_set_linker_script(${Target} ${PFB_DIRECTORY}/linker_common/application.ld)
+    _pfb_append_with_sha256(${Target})
+endfunction()
+
+# append SHA256 at the end of the binary
+function(_pfb_append_with_sha256 Target)
+    find_package(Python COMPONENTS Interpreter REQUIRED)
+    if (NOT Python_Interpreter_FOUND)
+        message(FATAL_ERROR "Python interpreter not found and is required for SHA256 appending.")
+    endif ()
+
+    add_custom_command(
+        TARGET ${Target}
+        POST_BUILD
+        # NOTE: without manually creating a .bin file, the file won't exist at the time of the command execution
+        COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${Target}> $<TARGET_PROPERTY:${Target},NAME>.bin
+        COMMAND ${Python_EXECUTABLE} ${PFB_DIRECTORY}/scripts/sha256_append.py --target-file "$<TARGET_PROPERTY:${Target},NAME>.bin"
+        COMMENT "Appending FOTA file with SHA256...")
+endfunction ()
+
+################################################################################
 # Create bootloader binary
+################################################################################
 add_executable(pico_fota_bootloader
                bootloader.c)
 
@@ -64,16 +95,10 @@ if (WITH_BOOTLOADER_LOGS)
     if (REDIRECT_BOOTLOADER_LOGS_TO_UART)
         pico_enable_stdio_usb(pico_fota_bootloader 0)
         pico_enable_stdio_uart(pico_fota_bootloader 1)
-    else()
+    else ()
         pico_enable_stdio_usb(pico_fota_bootloader 1)
         pico_enable_stdio_uart(pico_fota_bootloader 0)
     endif ()
 endif ()
 
 pico_add_extra_outputs(pico_fota_bootloader)
-
-set(PFB_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
-function (pfb_compile_with_bootloader Target)
-    target_link_options(${Target} PRIVATE "-L${PFB_DIRECTORY}/linker_common")
-    pico_set_linker_script(${Target} ${PFB_DIRECTORY}/linker_common/application.ld)
-endfunction ()

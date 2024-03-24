@@ -28,6 +28,8 @@
 #include <hardware/sync.h>
 #include <hardware/watchdog.h>
 
+#include <mbedtls/sha256.h>
+
 #include <pico_fota_bootloader.h>
 
 #include "../linker_common/linker_definitions.h"
@@ -46,6 +48,8 @@
 
 #define PFB_SHOULD_ROLLBACK_MAGIC 0xdeadead
 #define PFB_SHOULD_NOT_ROLLBACK_MAGIC 0x00000000
+
+#define SHA256_DIGEST_SIZE 32
 
 static inline void erase_flash_info_partition_isr_unsafe(void) {
     flash_range_erase(PFB_ADDR_WITH_XIP_OFFSET_AS_U32(__FLASH_INFO_START),
@@ -106,6 +110,11 @@ static void mark_if_is_after_rollback(uint32_t magic) {
     overwrite_4_bytes_in_flash(dest_addr, magic);
 }
 
+static void *get_image_sha256_address(size_t image_size) {
+    return (void *) (PFB_ADDR_AS_U32(__FLASH_DOWNLOAD_SLOT_START) + image_size
+                     - SHA256_DIGEST_SIZE);
+}
+
 void pfb_mark_download_slot_as_valid(void) {
     mark_download_slot(PFB_SHOULD_SWAP_MAGIC);
 }
@@ -162,6 +171,46 @@ void pfb_firmware_commit(void) {
 
 bool pfb_is_after_rollback(void) {
     return (__FLASH_INFO_IS_AFTER_ROLLBACK == PFB_IS_AFTER_ROLLBACK_MAGIC);
+}
+
+int pfb_firmware_sha256_check(size_t firmware_size) {
+    if (firmware_size % PFB_ALIGN_SIZE) {
+        return 1;
+    }
+
+    mbedtls_sha256_context ctx;
+    mbedtls_sha256_init(&ctx);
+
+    int ret;
+    ret = mbedtls_sha256_starts_ret(&ctx, 0);
+    if (ret) {
+        return ret;
+    }
+
+    uint32_t image_start_address = PFB_ADDR_AS_U32(__FLASH_DOWNLOAD_SLOT_START);
+    size_t image_size_without_sha256 = firmware_size - 256;
+    ret = mbedtls_sha256_update_ret(&ctx,
+                                    (const unsigned char *) image_start_address,
+                                    image_size_without_sha256);
+    if (ret) {
+        return ret;
+    }
+
+    unsigned char calculated_sha256[SHA256_DIGEST_SIZE];
+    ret = mbedtls_sha256_finish_ret(&ctx, calculated_sha256);
+    if (ret) {
+        return ret;
+    }
+
+    mbedtls_sha256_free(&ctx);
+
+    void *image_sha256_address = get_image_sha256_address(firmware_size);
+    if (memcmp(calculated_sha256, image_sha256_address, SHA256_DIGEST_SIZE)
+        != 0) {
+        return 1;
+    }
+
+    return 0;
 }
 
 void _pfb_mark_should_rollback(void) {

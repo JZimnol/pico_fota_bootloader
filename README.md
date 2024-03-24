@@ -38,15 +38,34 @@ The memory layout is as follows:
 
 `pico_fota_bootloader` supports the following features:
 
-- rollback mechanism - if the freshly downloaded firmware won't be comitted
+- rollback mechanism - if the freshly downloaded firmware won't be committed
   before the very next reboot, the bootloader will perform the rollback (the
   firmware will be swapped back to the previous working version)
+
+- SHA256 calculation - application binary image (`<app_name>_fota_image.bin`) is
+  appended with a SHA256 value
+
+  - after downloading a binary file, the user can use
+    `pfb_firmware_sha256_check` function to check if the calculated SHA256
+    matches the expected one
+
+  - see the [example](#your_projectmainc) for more information
+
 - basic debug logging - enabled by default, can be turned off using
   `-DWITH_BOOTLOADER_LOGS=OFF` cmake option
+
   - debug logs can be redirected from USB to UART using
     `-DREDIRECT_BOOTLOADER_LOGS_TO_UART=ON` cmake option
 
-## File structure (example)
+## Prerequisites
+
+- `pico-sdk` version `>= 1.5.1`
+
+- `Python 3` with the following packages: `argparse`, `hashlib`, `os`
+
+# Example
+
+## File structure
 
 Assume the following file structure:
 ```
@@ -121,11 +140,16 @@ int main() {
     for (int i = 0; i < size; i++) {
         if (pfb_write_to_flash_aligned_256_bytes(src, offset_bytes, len_bytes)) {
             // handle error if needed
-            break;
+            while (1);
         }
     }
     ...
 
+    size_t firmware_size = offset_bytes;
+    if (pfb_firmware_sha256_check(firmware_size)) {
+        // handle the SHA256 error/mismatch if needed
+        while (1);
+    }
     // once the binary file has been successfully downloaded, mark the download
     // slot as valid - the firmware will be swapped after a reboot
     pfb_mark_download_slot_as_valid();
@@ -138,7 +162,7 @@ int main() {
 }
 ```
 
-## Compiling and running (example)
+## Compiling and running
 
 ### Compiling
 
@@ -174,6 +198,7 @@ build/
     ├── your_app.dis
     ├── your_app.elf
     ├── your_app.elf.map
+    ├── your_app_fota_image.bin
     ├── your_app.hex
     └── your_app.uf2
 ```
@@ -192,7 +217,7 @@ application state.
 
 ### Performing firmware update
 
-To perform a firmware update (over the air), a `your_app.bin` file should be
-sent to or downloaded by the Pico W. Note that while rebuilding the
+To perform a firmware update (over the air), a `your_app_fota_image.bin` file
+should be sent to or downloaded by the Pico W. Note that while rebuilding the
 application, the linker scripts' contents should not be changed or should be
 changed carefully to maintain the memory layout backward compatibility.

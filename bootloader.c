@@ -34,9 +34,13 @@
 #include "linker_common/linker_definitions.h"
 
 #ifdef WITH_BOOTLOADER_LOGS
-#define BOOTLOADER_LOG(...) puts("[BOOTLAODER] " __VA_ARGS__)
+#    define BOOTLOADER_LOG(...)                \
+        do {                                   \
+            puts("[BOOTLOADER] " __VA_ARGS__); \
+            sleep_ms(5);                       \
+        } while (0)
 #else // WITH_BOOTLOADER_LOGS
-#define BOOTLOADER_LOG(...) ((void)0)
+#    define BOOTLOADER_LOG(...) ((void) 0)
 #endif // WITH_BOOTLOADER_LOGS
 
 void _pfb_mark_pico_has_new_firmware(void);
@@ -129,28 +133,24 @@ int main(void) {
 
     if (_pfb_should_rollback()) {
         BOOTLOADER_LOG("Rolling back to the previous firmware");
-        sleep_ms(10);
         swap_images();
         pfb_firmware_commit();
         _pfb_mark_pico_has_no_new_firmware();
         _pfb_mark_is_after_rollback();
     } else if (_pfb_has_firmware_to_swap()) {
         BOOTLOADER_LOG("Swapping images");
-        sleep_ms(10);
         swap_images();
         _pfb_mark_pico_has_new_firmware();
         _pfb_mark_is_not_after_rollback();
         _pfb_mark_should_rollback();
     } else {
         BOOTLOADER_LOG("Nothing to swap");
-        sleep_ms(10);
         pfb_firmware_commit();
         _pfb_mark_pico_has_no_new_firmware();
     }
 
     pfb_mark_download_slot_as_invalid();
     BOOTLOADER_LOG("End of execution, executing the application...\n");
-    sleep_ms(10);
 
     disable_interrupts();
     reset_peripherals();

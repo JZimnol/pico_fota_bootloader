@@ -106,6 +106,18 @@ void pfb_firmware_commit(void);
  */
 bool pfb_is_after_rollback(void);
 
+/**
+ * Checks if the calculated SHA256 of the image matches the expected one.
+ *
+ * @param firmware_size Size of the downloaded firmware image in bytes.
+ *
+ * @return A negative mbedtls error code on calculation error,
+ *         1 if the firmware size is not a multiple of 256 or if the calculated
+ *         and expected sha are different,
+ *         0 otherwise.
+ */
+int pfb_firmware_sha256_check(size_t firmware_size);
+
 #ifdef __cplusplus
 }
 #endif
