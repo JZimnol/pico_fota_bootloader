@@ -62,8 +62,9 @@ target_include_directories(pico_fota_bootloader_lib PUBLIC
 target_link_libraries(pico_fota_bootloader_lib PUBLIC
                       hardware_watchdog
                       pico_stdlib
-                      pico_mbedtls
                       hardware_flash)
+target_link_libraries(pico_fota_bootloader_lib PRIVATE
+                      pico_mbedtls)
 target_link_options(pico_fota_bootloader_lib PRIVATE
                     "-T${CMAKE_CURRENT_SOURCE_DIR}/linker_common/linker_definitions.ld")
 
