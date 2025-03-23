@@ -87,7 +87,8 @@ static void swap_images(void) {
     restore_interrupts(saved_interrupts);
 }
 
-static void disable_interrupts(void) {
+// Added a _ prefix to avoid name collision with the pico-sdk 2.1.1
+static void _disable_interrupts(void) {
     SysTick->CTRL &= ~1;
 
     NVIC->ICER[0] = 0xFFFFFFFF;
@@ -152,7 +153,7 @@ int main(void) {
     pfb_mark_download_slot_as_invalid();
     BOOTLOADER_LOG("End of execution, executing the application...\n");
 
-    disable_interrupts();
+    _disable_interrupts();
     reset_peripherals();
     jump_to_vtor(__flash_info_app_vtor);
 
