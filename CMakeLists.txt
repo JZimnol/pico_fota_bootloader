@@ -21,6 +21,12 @@
 
 cmake_minimum_required(VERSION 3.13)
 
+if(${PICO_PLATFORM} STREQUAL "rp2350-arm-s")
+    set(CPU "2350")
+else()
+    set(CPU "2040")
+endif()
+
 ########################################
 # CMake options
 ########################################
@@ -30,6 +36,14 @@ option(PFB_WITH_IMAGE_ENCRYPTION "Enables image encryption using AES ECB algorit
 option(PFB_AES_KEY "AES key used for image encryption and decryption")
 option(PFB_WITH_SHA256_HASHING "Enables image SHA256 appending and checking" ON)
 
+########################################
+# Build linker definitions
+########################################
+# PICO_FLASH_SIZE_BYTES
+execute_process(
+    COMMAND cat ${CMAKE_CURRENT_LIST_DIR}/linker_common/linker_definitions.in
+    COMMAND ${CMAKE_C_COMPILER} -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES} -E -P -o ${CMAKE_BINARY_DIR}/linker_definitions.ld -
+    )
 ########################################
 # Check and set AES key
 ########################################
@@ -66,7 +80,7 @@ target_link_libraries(pico_fota_bootloader_lib PUBLIC
 target_link_libraries(pico_fota_bootloader_lib PRIVATE
                       pico_mbedtls)
 target_link_options(pico_fota_bootloader_lib PRIVATE
-                    "-T${CMAKE_CURRENT_SOURCE_DIR}/linker_common/linker_definitions.ld")
+                    "-T${CMAKE_CURRENT_BINARY_DIR}/linker_definitions.ld")
 
 if (PFB_WITH_IMAGE_ENCRYPTION)
     target_compile_definitions(pico_fota_bootloader_lib PRIVATE PFB_WITH_IMAGE_ENCRYPTION)
@@ -82,8 +96,14 @@ set(BOOTLOADER_DIR_GLOBAL ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
 # Manage application binary
 ########################################
 function(pfb_compile_with_bootloader Target)
-    target_link_options(${Target} PRIVATE "-L${BOOTLOADER_DIR_GLOBAL}/linker_common")
-    pico_set_linker_script(${Target} ${BOOTLOADER_DIR_GLOBAL}/linker_common/application.ld)
+    if(${PICO_PLATFORM} STREQUAL "rp2350-arm-s")
+        set(CPU "2350")
+    else()
+        set(CPU "2040")
+    endif()
+
+    target_link_options(${Target} PRIVATE "-L${BOOTLOADER_DIR_GLOBAL}/linker_common" "-L${CMAKE_CURRENT_BINARY_DIR}")
+    pico_set_linker_script(${Target} ${BOOTLOADER_DIR_GLOBAL}/linker_common/app${CPU}.ld)
 
     if (PFB_WITH_SHA256_HASHING OR PFB_WITH_IMAGE_ENCRYPTION)
         find_package(Python COMPONENTS Interpreter REQUIRED)
@@ -134,13 +154,14 @@ function (target_compile_link_options Name Option)
     target_link_options(${Name} PRIVATE ${Option})
 endfunction ()
 
+target_compile_definitions(pico_fota_bootloader PRIVATE -DPICO_PLATFORM=${PICO_PLATFORM})
 target_compile_link_options(pico_fota_bootloader "-Os")
 target_compile_link_options(pico_fota_bootloader "-ffunction-sections")
 target_compile_link_options(pico_fota_bootloader "-fdata-sections")
-target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/linker_common")
+target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/linker_common" "-L${CMAKE_CURRENT_BINARY_DIR}")
 target_link_options(pico_fota_bootloader PRIVATE "LINKER:--gc-sections")
 
-pico_set_linker_script(pico_fota_bootloader ${CMAKE_CURRENT_SOURCE_DIR}/linker_common/bootloader.ld)
+pico_set_linker_script(pico_fota_bootloader ${CMAKE_CURRENT_SOURCE_DIR}/linker_common/boot${CPU}.ld)
 pico_add_extra_outputs(pico_fota_bootloader)
 
 ########################################

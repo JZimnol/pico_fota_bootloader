@@ -217,7 +217,6 @@ SECTIONS
         . = . + 1;
         . = ALIGN(256) - 1;
         BYTE(0);
-        __flash_binary_end = .;
         PROVIDE(__flash_binary_end = .);
     } > FLASH
 

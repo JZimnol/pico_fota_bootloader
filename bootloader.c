@@ -23,7 +23,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#if PICO_PLATFORM == rp2350-arm-s
+#include <RP2350.h>
+#else
 #include <RP2040.h>
+#endif
+
 #include <hardware/flash.h>
 #include <hardware/resets.h>
 #include <hardware/sync.h>
