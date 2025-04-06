@@ -23,7 +23,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(PICO_RP2350)
+#include <RP2350.h>
+#elif defined(PICO_RP2040)
 #include <RP2040.h>
+#else
+#error "Unsupported PICO platform"
+#endif
+
 #include <hardware/flash.h>
 #include <hardware/resets.h>
 #include <hardware/sync.h>
