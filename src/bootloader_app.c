@@ -38,6 +38,7 @@
 #include <pico/stdlib.h>
 
 #include <pico_fota_bootloader/core.h>
+#include <stdlib.h>
 
 #include "flash_utils.h"
 #include "linker_definitions.h"
@@ -149,6 +150,7 @@ static bool is_application_slot_empty(void) {
 
 static void print_welcome_message(void) {
 #ifdef PFB_WITH_BOOTLOADER_LOGS
+    uint32_t space = PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH) / 1024;
     puts("");
     puts("***********************************************************");
     puts("*                                                         *");
@@ -157,6 +159,7 @@ static void print_welcome_message(void) {
     puts("*                                                         *");
     puts("***********************************************************");
     puts("");
+    printf("Maximum code length: %luK\r\n", space);
 #endif // PFB_WITH_BOOTLOADER_LOGS
 }
 
