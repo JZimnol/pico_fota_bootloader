@@ -35,6 +35,7 @@
 #include <pico/stdlib.h>
 
 #include <pico_fota_bootloader.h>
+#include <stdlib.h>
 
 #include "linker_common/linker_definitions.h"
 
@@ -120,6 +121,7 @@ static void jump_to_vtor(uint32_t vtor) {
 
 static void print_welcome_message(void) {
 #ifdef PFB_WITH_BOOTLOADER_LOGS
+    uint32_t space = PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH) / 1024;
     puts("");
     puts("***********************************************************");
     puts("*                                                         *");
@@ -128,6 +130,7 @@ static void print_welcome_message(void) {
     puts("*                                                         *");
     puts("***********************************************************");
     puts("");
+    printf("Maximum code length: %luK\r\n", space);
 #endif // PFB_WITH_BOOTLOADER_LOGS
 }
 

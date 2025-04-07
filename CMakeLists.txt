@@ -36,13 +36,17 @@ option(PFB_WITH_IMAGE_ENCRYPTION "Enables image encryption using AES ECB algorit
 option(PFB_AES_KEY "AES key used for image encryption and decryption")
 option(PFB_WITH_SHA256_HASHING "Enables image SHA256 appending and checking" ON)
 
+if ( NOT PFB_RESERVED_FILESYSTEM_SIZE_KB )
+    set(PFB_RESERVED_FILESYSTEM_SIZE_KB 0)
+endif()
+
 ########################################
 # Build linker definitions
 ########################################
 # PICO_FLASH_SIZE_BYTES
 execute_process(
     COMMAND cat ${CMAKE_CURRENT_LIST_DIR}/linker_common/linker_definitions.in
-    COMMAND ${CMAKE_C_COMPILER} -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES} -E -P -o ${CMAKE_BINARY_DIR}/linker_definitions.ld -
+    COMMAND ${CMAKE_C_COMPILER} -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES} -DFILESYSTEM_SIZE=${PFB_RESERVED_FILESYSTEM_SIZE_KB} -E -P -o ${CMAKE_BINARY_DIR}/linker_definitions.ld -
     )
 ########################################
 # Check and set AES key
