@@ -28,6 +28,8 @@
 #include <hardware/resets.h>
 #include <hardware/sync.h>
 #include <pico/stdlib.h>
+#include "pico/bootrom.h"
+
 
 #include <pico_fota_bootloader.h>
 
@@ -151,6 +153,10 @@ int main(void) {
     }
 
     pfb_mark_download_slot_as_invalid();
+    if (pfb_is_application_slot_empty()) {
+        sleep_ms(5000);
+        reset_usb_boot(0, 0); 
+    }
     BOOTLOADER_LOG("End of execution, executing the application...\n");
 
     _disable_interrupts();
