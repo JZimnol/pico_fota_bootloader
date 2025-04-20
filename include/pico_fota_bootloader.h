@@ -126,25 +126,6 @@ bool pfb_is_after_rollback(void);
  */
 int pfb_firmware_sha256_check(size_t firmware_size);
 
-/**
- * Checks whether the application slot (i.e., the main firmware region)
- * is empty or invalid.
- *
- * This function inspects the reset handler address (located at offset +4 
- * from the application start address) to determine whether a valid 
- * firmware is present. It returns true if the reset handler is:
- * - 0xFFFFFFFF (uninitialized flash),
- * - Below 0x10000000 (outside valid memory space),
- * - Above 0x10200000 (out of flash range for RP2040).
- *
- * This check is especially useful in custom boards without BOOTSEL buttons,
- * allowing the firmware to detect an empty slot and trigger a USB reset
- * to enter BOOTLOADER mode automatically.
- *
- * @return true if the application slot is empty or contains an invalid
- *         firmware, false otherwise.
- */
- bool pfb_is_application_slot_empty(void);
 
 #ifdef __cplusplus
 }

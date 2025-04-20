@@ -296,11 +296,3 @@ void _pfb_mark_pico_has_new_firmware(void) {
 void _pfb_mark_pico_has_no_new_firmware(void) {
     notify_pico_about_firmware(PFB_NO_NEW_FIRMWARE_MAGIC);
 }
-
-bool pfb_is_application_slot_empty(void) {
-    const uint32_t *vtor = (const uint32_t *)PFB_ADDR_AS_U32(__FLASH_APP_START);
-    uint32_t reset_handler = vtor[1]; // offset +4
-    return (reset_handler == 0xFFFFFFFF || 
-            reset_handler < 0x10000000 || 
-            reset_handler > 0x10200000);
-}

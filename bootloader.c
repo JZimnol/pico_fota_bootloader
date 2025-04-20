@@ -30,7 +30,6 @@
 #include <pico/stdlib.h>
 #include "pico/bootrom.h"
 
-
 #include <pico_fota_bootloader.h>
 
 #include "linker_common/linker_definitions.h"
@@ -115,6 +114,14 @@ static void jump_to_vtor(uint32_t vtor) {
     asm volatile("bx %0" ::"r"(reset_vector));
 }
 
+static bool is_application_slot_empty(void) {
+    const uint32_t *vtor = (const uint32_t *)PFB_ADDR_AS_U32(__FLASH_APP_START);
+    uint32_t reset_handler = vtor[1]; // offset +4
+    return (reset_handler == 0xFFFFFFFF || 
+            reset_handler < 0x10000000 || 
+            reset_handler > 0x10200000);
+}
+
 static void print_welcome_message(void) {
 #ifdef PFB_WITH_BOOTLOADER_LOGS
     puts("");
@@ -153,7 +160,7 @@ int main(void) {
     }
 
     pfb_mark_download_slot_as_invalid();
-    if (pfb_is_application_slot_empty()) {
+    if (is_application_slot_empty()) {
         sleep_ms(5000);
         reset_usb_boot(0, 0); 
     }
