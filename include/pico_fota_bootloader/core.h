@@ -20,8 +20,7 @@
  * SOFTWARE.
  */
 
-#ifndef PICO_FOTA_BOOTLOADER_H
-#define PICO_FOTA_BOOTLOADER_H
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -129,5 +128,3 @@ int pfb_firmware_sha256_check(size_t firmware_size);
 #ifdef __cplusplus
 }
 #endif
-
-#endif // PICO_FOTA_BOOTLOADER_H

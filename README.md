@@ -101,16 +101,19 @@ Assume the following file structure:
 your_project/
 ├── CMakeLists.txt
 ├── main.c
-├── pico_fota_bootloader/
-│   ├── CMakeLists.txt
-│   ├── include/
-│   │   └── pico_fota_bootloader.h
-│   ├── linker_common/
-│   │   ├── application.ld
-│   │   └── ...
-│   ├── bootloader.c
-│   └── src/
-│       └── pico_fota_bootloader.c
+├── deps/
+|   └── pico_fota_bootloader/
+│       ├── CMakeLists.txt
+│       ├── include/
+│       │   └── pico_fota_bootloader/
+│       │       └── core.h
+│       ├── linker_common/
+│       │   ├── application.ld
+│       │   └── ...
+│       └── src/
+|           ├── bootloader_app.c
+│           ├── pico_fota_bootloader.c
+│           └── ...
 └── pico_sdk_import.cmake
 ```
 
@@ -127,7 +130,7 @@ include(pico_sdk_import.cmake)
 ...
 pico_sdk_init()
 
-add_subdirectory(pico_fota_bootloader)
+add_subdirectory(deps/pico_fota_bootloader)
 
 add_executable(your_app
                main.c)
@@ -141,7 +144,7 @@ pico_add_extra_outputs(your_app)
 
 ### your_project/main.c
 ```c
-#include <pico_fota_bootloader.h>
+#include <pico_fota_bootloader/core.h>
 ...
 int main() {
     ...
@@ -207,17 +210,18 @@ You should have output similar to:
 
 ```
 build/
-├── pico_fota_bootloader
-│   ├── CMakeFiles
-│   ├── cmake_install.cmake
-│   ├── libpico_fota_bootloader_lib.a
-│   ├── Makefile
-│   ├── pico_fota_bootloader.bin
-│   ├── pico_fota_bootloader.dis
-│   ├── pico_fota_bootloader.elf
-│   ├── pico_fota_bootloader.elf.map
-│   ├── pico_fota_bootloader.hex
-│   └── pico_fota_bootloader.uf2
+├── deps/
+|   └── pico_fota_bootloader
+│       ├── CMakeFiles
+│       ├── cmake_install.cmake
+│       ├── libpico_fota_bootloader_lib.a
+│       ├── Makefile
+│       ├── pico_fota_bootloader.bin
+│       ├── pico_fota_bootloader.dis
+│       ├── pico_fota_bootloader.elf
+│       ├── pico_fota_bootloader.elf.map
+│       ├── pico_fota_bootloader.hex
+│       └── pico_fota_bootloader.uf2
 └── your_app
     ├── CMakeFiles
     ├── cmake_install.cmake
@@ -238,8 +242,11 @@ Set Pico W to the BOOTSEL state (by powering it up with the `BOOTSEL` button
 pressed) and copy the `pico_fota_bootloader.uf2` file into it. Right now the
 Pico W is flashed with the bootloader but does not have proper application in
 the application FLASH memory slot. Then, set Pico W to the BOOTSEL state again
-and copy the `your_app.uf2` file. The board should reboot and start `your_app`
-application.
+(if it is not already in that state) and copy the `your_app.uf2` file. The board
+should reboot and start `your_app` application.
+
+**NOTE:** you can also flash the board with `PicoProbe` using files
+`pico_fota_bootloader.elf` and `your_app.elf`.
 
 **NOTE:** you can also look at the serial output logs to monitor the
 application state.

@@ -45,8 +45,8 @@ if (PFB_WITH_IMAGE_ENCRYPTION)
         message(FATAL_ERROR
                 "AES key must be 32 bytes long and contain only characters from the set [0-9a-zA-Z].")
     endif ()
-    math(EXPR num_zeros_needed "32 - ${aes_key_length}")
-    string(REPEAT "x" ${num_zeros_needed} XS)
+    math(EXPR num_xs_needed "32 - ${aes_key_length}")
+    string(REPEAT "x" ${num_xs_needed} XS)
     string(CONCAT PFB_AES_KEY ${PFB_AES_KEY} ${XS})
     message(STATUS "AES key padded to 32 characters: ${PFB_AES_KEY}")
     set(PFB_AES_KEY_GLOBAL ${PFB_AES_KEY} PARENT_SCOPE)
@@ -57,8 +57,11 @@ endif()
 ################################################################################
 add_library(pico_fota_bootloader_lib STATIC
             src/pico_fota_bootloader.c)
+target_sources(pico_fota_bootloader_lib PRIVATE src/flash_utils.c)
 target_include_directories(pico_fota_bootloader_lib PUBLIC
                            ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(pico_fota_bootloader_lib PRIVATE
+                           linker_common)
 target_link_libraries(pico_fota_bootloader_lib PUBLIC
                       hardware_watchdog
                       pico_stdlib
@@ -67,6 +70,10 @@ target_link_libraries(pico_fota_bootloader_lib PRIVATE
                       pico_mbedtls)
 target_link_options(pico_fota_bootloader_lib PRIVATE
                     "-T${CMAKE_CURRENT_SOURCE_DIR}/linker_common/linker_definitions.ld")
+target_compile_options(pico_fota_bootloader_lib PRIVATE
+                       -Wall
+                       -Wextra
+                       -Wnull-dereference)
 
 if (PFB_WITH_IMAGE_ENCRYPTION)
     target_compile_definitions(pico_fota_bootloader_lib PRIVATE PFB_WITH_IMAGE_ENCRYPTION)
@@ -122,7 +129,10 @@ endfunction()
 # Create bootloader binary
 ################################################################################
 add_executable(pico_fota_bootloader
-               bootloader.c)
+               src/bootloader_app.c)
+target_sources(pico_fota_bootloader PRIVATE src/flash_utils.c)
+target_include_directories(pico_fota_bootloader PRIVATE
+                           linker_common)
 target_link_libraries(pico_fota_bootloader
                       hardware_structs
                       hardware_resets
@@ -139,6 +149,10 @@ target_compile_link_options(pico_fota_bootloader "-ffunction-sections")
 target_compile_link_options(pico_fota_bootloader "-fdata-sections")
 target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/linker_common")
 target_link_options(pico_fota_bootloader PRIVATE "LINKER:--gc-sections")
+target_compile_options(pico_fota_bootloader PRIVATE
+                       -Wall
+                       -Wextra
+                       -Wnull-dereference)
 
 pico_set_linker_script(pico_fota_bootloader ${CMAKE_CURRENT_SOURCE_DIR}/linker_common/bootloader.ld)
 pico_add_extra_outputs(pico_fota_bootloader)
@@ -156,4 +170,3 @@ if (PFB_WITH_BOOTLOADER_LOGS)
         pico_enable_stdio_uart(pico_fota_bootloader 0)
     endif ()
 endif ()
-

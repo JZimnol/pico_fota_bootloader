@@ -20,18 +20,13 @@
  * SOFTWARE.
  */
 
-#ifndef PICO_FOTA_BOOTLOADER_LINKER_DEFINITIONS_H
-#define PICO_FOTA_BOOTLOADER_LINKER_DEFINITIONS_H
+#pragma once
 
 #include <pico/stdlib.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define PFB_ADDR_AS_U32(Data) (uint32_t) & (Data)
-#define PFB_ADDR_WITH_XIP_OFFSET_AS_U32(Data) \
-    (PFB_ADDR_AS_U32(Data) - (XIP_BASE))
 
 extern uint32_t __flash_info_app_vtor;
 extern uint32_t __FLASH_START;
@@ -49,5 +44,3 @@ extern uint32_t __FLASH_SWAP_SPACE_LENGTH;
 #ifdef __cplusplus
 }
 #endif
-
-#endif // PICO_FOTA_BOOTLOADER_LINKER_DEFINITIONS_H
