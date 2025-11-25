@@ -38,7 +38,6 @@
 #include <pico/stdlib.h>
 
 #include <pico_fota_bootloader/core.h>
-#include <stdlib.h>
 
 #include "flash_utils.h"
 #include "linker_definitions.h"
@@ -159,7 +158,7 @@ static void print_welcome_message(void) {
     puts("*                                                         *");
     puts("***********************************************************");
     puts("");
-    printf("Maximum code length: %luK\r\n", space);
+    printf("[BOOTLOADER] Maximum code length: %luK\r\n", space);
 #endif // PFB_WITH_BOOTLOADER_LOGS
 }
 

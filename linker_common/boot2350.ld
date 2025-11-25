@@ -84,6 +84,19 @@ SECTIONS
         LONG(0x00000000)
     } > FLASH_INFO
 
+    ASSERT(__flash_info_app_vtor == __FLASH_INFO_APP_HEADER,
+            "__FLASH_INFO_APP_HEADER definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_download_slot_vtor == __FLASH_INFO_DOWNLOAD_HEADER,
+            "__FLASH_INFO_DOWNLOAD_HEADER definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_is_download_slot_valid == __FLASH_INFO_IS_DOWNLOAD_SLOT_VALID,
+            "__FLASH_INFO_IS_DOWNLOAD_SLOT_VALID definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_is_firmware_is_swapped == __FLASH_INFO_IS_FIRMWARE_SWAPPED,
+            "__FLASH_INFO_IS_FIRMWARE_SWAPPED definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_is_after_rollback == __FLASH_INFO_IS_AFTER_ROLLBACK,
+            "__FLASH_INFO_IS_AFTER_ROLLBACK definition in linker_definitions.ld file is not valid")
+    ASSERT(__flash_info_should_rollback == __FLASH_INFO_SHOULD_ROLLBACK,
+            "__FLASH_INFO_SHOULD_ROLLBACK definition in linker_definitions.ld file is not valid")
+
     /* Note the boot2 section is optional, and should be discarded if there is
        no reference to it *inside* the binary, as it is not called by the
        bootrom. (The bootrom performs a simple best-effort XIP setup and

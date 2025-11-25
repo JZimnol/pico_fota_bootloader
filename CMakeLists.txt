@@ -21,10 +21,12 @@
 
 cmake_minimum_required(VERSION 3.13)
 
-if(${PICO_PLATFORM} STREQUAL "rp2350-arm-s")
-    set(CPU "2350")
+if(${PICO_PLATFORM} STREQUAL "rp2350-arm-s" OR ${PICO_PLATFORM} STREQUAL "rp2350")
+    set(CPU "2350" CACHE STRING "CPU model")
+elseif(${PICO_PLATFORM} STREQUAL "rp2040")
+    set(CPU "2040" CACHE STRING "CPU model")
 else()
-    set(CPU "2040")
+    message(FATAL_ERROR "Platform not supported: ${PICO_PLATFORM}")
 endif()
 
 ########################################
@@ -46,7 +48,7 @@ if ( NOT DEFINED PFB_WITH_SHA256_HASHING )
     option(PFB_WITH_SHA256_HASHING "Enables image SHA256 appending and checking" ON)
 endif()
 if ( NOT PFB_RESERVED_FILESYSTEM_SIZE_KB )
-    set(PFB_RESERVED_FILESYSTEM_SIZE_KB 0)
+    set(PFB_RESERVED_FILESYSTEM_SIZE_KB 0 CACHE STRING "EXPERIMENTAL: Size in KB reserved for the filesystem")
 endif()
 
 ########################################
@@ -55,7 +57,9 @@ endif()
 # PICO_FLASH_SIZE_BYTES
 execute_process(
     COMMAND cat ${CMAKE_CURRENT_LIST_DIR}/linker_common/linker_definitions.in
-    COMMAND ${CMAKE_C_COMPILER} -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES} -DFILESYSTEM_SIZE=${PFB_RESERVED_FILESYSTEM_SIZE_KB} -E -P -o ${CMAKE_BINARY_DIR}/linker_definitions.ld -
+    COMMAND ${CMAKE_C_COMPILER} -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES}
+            -DFILESYSTEM_SIZE=${PFB_RESERVED_FILESYSTEM_SIZE_KB} -E -P
+            -o ${CMAKE_BINARY_DIR}/linker_definitions.ld -
     )
 ########################################
 # Check and set AES key
@@ -116,12 +120,6 @@ set(BOOTLOADER_DIR_GLOBAL ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
 # Manage application binary
 ########################################
 function(pfb_compile_with_bootloader Target)
-    if(${PICO_PLATFORM} STREQUAL "rp2350-arm-s")
-        set(CPU "2350")
-    else()
-        set(CPU "2040")
-    endif()
-
     target_link_options(${Target} PRIVATE "-L${BOOTLOADER_DIR_GLOBAL}/linker_common" "-L${CMAKE_CURRENT_BINARY_DIR}")
     pico_set_linker_script(${Target} ${BOOTLOADER_DIR_GLOBAL}/linker_common/app${CPU}.ld)
 
