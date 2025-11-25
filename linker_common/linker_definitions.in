@@ -38,10 +38,13 @@
     +-------------------------------------------+
     |            Padding (4072 bytes)           |
     +-------------------------------------------+  <-- __FLASH_APP_START
-    |       Flash Application Slot (1004k)      |
+    |         Flash Application Slot            |
     +-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START
-    |        Flash Download Slot (1004k)        |
+    |           Flash Download Slot             |
     +-------------------------------------------+
+    |   Filesystem Block (FILESYSTEM_SIZE)      |
+    |              (Optional)                   |
+    +-------------------------------------------+  <-- __FLASH_END (FLASH_SIZE)
 */
 
 __FLASH_START = 0x10000000;
@@ -61,7 +64,7 @@ __FLASH_INFO_SHOULD_ROLLBACK = __FLASH_INFO_IS_AFTER_ROLLBACK + 4;
 
 __FLASH_APP_START = __FLASH_INFO_START + __FLASH_INFO_LENGTH;
 
-/* (2048k - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH) / 2 */
+/* (FLASH_SIZE - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH - __FILESYSTEM_SIZE) / 2 */
 __FLASH_SWAP_SPACE_LENGTH = (__FLASH_SIZE - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH) / 2;
 
 /*

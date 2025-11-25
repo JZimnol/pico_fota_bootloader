@@ -1,8 +1,9 @@
-# Raspberry Pi Pico W FOTA Bootloader
+# Raspberry Pi Pico W and Pico2 W FOTA Bootloader
 
 This bootloader allows you to perform secure `Firmware Over The Air (FOTA)`
-OTA updates with the Raspberry Pi Pico W board. It contains all required linker
-scripts that will adapt your application to the new application memory layout.
+OTA updates with the Raspberry Pi Pico W and Pico2 W boards. It contains all
+required linker scripts that will adapt your application to the new application
+memory layout.
 
 The memory layout is as follows:
 
@@ -24,10 +25,13 @@ The memory layout is as follows:
 +-------------------------------------------+
 |            Padding (4072 bytes)           |
 +-------------------------------------------+  <-- __FLASH_APP_START
-|       Flash Application Slot (1004k)      |
+|           Flash Application Slot          |
 +-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START
-|        Flash Download Slot (1004k)        |
+|            Flash Download Slot            |
 +-------------------------------------------+
+|   Filesystem Block (FILESYSTEM_SIZE)      |
+|              (Optional)                   |
++-------------------------------------------+  <-- __FLASH_END (FLASH_SIZE)
 ```
 ## Basic usage
 
@@ -81,11 +85,13 @@ The memory layout is as follows:
   - debug logs can be redirected from USB to UART using
     `-DPFB_REDIRECT_BOOTLOADER_LOGS_TO_UART=ON` CMake option
 
+- **filesystem block** - block at the end of the flash, reserved for a file system.
+  0 by default, can be set with
+    `-DPFB_RESERVED_FILESYSTEM_SIZE_KB=<value in KB>` CMake flag.
+
 ## Prerequisites
 
-- `pico-sdk` version `>= 1.5.1`
-
-  - required for the `pico_mbedtls` library
+- `pico-sdk` version `>= 2.2.0`
 
 - `Python 3` with the following packages: `argparse`, `hashlib`, `os`,
   `Crypto.Cipher`
@@ -108,7 +114,8 @@ your_project/
 │       │   └── pico_fota_bootloader/
 │       │       └── core.h
 │       ├── linker_common/
-│       │   ├── application.ld
+│       │   ├── app2040.ld
+│       │   ├── app2350.ld
 │       │   └── ...
 │       └── src/
 |           ├── bootloader_app.c
