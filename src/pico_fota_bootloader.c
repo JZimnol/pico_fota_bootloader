@@ -154,6 +154,14 @@ bool pfb_is_after_rollback(void) {
     return (__FLASH_INFO_IS_AFTER_ROLLBACK == PFB_IS_AFTER_ROLLBACK_MAGIC);
 }
 
+#ifdef PFB_WITH_SHA256_HASHING
+#if MBEDTLS_VERSION_MAJOR >= 3
+#define mbedtls_sha256_starts_ret(ctx, is224)  mbedtls_sha256_starts(ctx, is224)
+#define mbedtls_sha256_update_ret(ctx, input, ilen)  mbedtls_sha256_update(ctx, input, ilen)
+#define mbedtls_sha256_finish_ret(ctx, output)  mbedtls_sha256_finish(ctx, output)
+#endif // MBEDTLS_VERSION_MAJOR
+#endif // PFB_WITH_SHA256_HASHING
+
 int pfb_firmware_sha256_check(size_t firmware_size) {
 #ifdef PFB_WITH_SHA256_HASHING
     if (firmware_size % PFB_ALIGN_SIZE || firmware_size < PFB_ALIGN_SIZE) {

@@ -23,7 +23,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(PICO_RP2350)
+#include <RP2350.h>
+#elif defined(PICO_RP2040)
 #include <RP2040.h>
+#else
+#error "Unsupported PICO platform"
+#endif
+
 #include <hardware/flash.h>
 #include <hardware/resets.h>
 #include <hardware/sync.h>
@@ -142,6 +149,7 @@ static bool is_application_slot_empty(void) {
 
 static void print_welcome_message(void) {
 #ifdef PFB_WITH_BOOTLOADER_LOGS
+    uint32_t space = PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH) / 1024;
     puts("");
     puts("***********************************************************");
     puts("*                                                         *");
@@ -150,6 +158,7 @@ static void print_welcome_message(void) {
     puts("*                                                         *");
     puts("***********************************************************");
     puts("");
+    printf("[BOOTLOADER] Maximum code length: %luK\r\n", space);
 #endif // PFB_WITH_BOOTLOADER_LOGS
 }
 

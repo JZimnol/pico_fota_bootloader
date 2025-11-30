@@ -21,7 +21,7 @@ extern "C" {
 #define PFB_SHOULD_ROLLBACK_MAGIC 0xdeadead
 #define PFB_SHOULD_NOT_ROLLBACK_MAGIC 0x00000000
 
-#define PFB_ADDR_AS_U32(Data) (uint32_t) & (Data)
+#define PFB_ADDR_AS_U32(Data) ((uint32_t) & (Data))
 #define PFB_ADDR_WITH_XIP_OFFSET_AS_U32(Data) \
     (PFB_ADDR_AS_U32(Data) - (XIP_BASE))
 
