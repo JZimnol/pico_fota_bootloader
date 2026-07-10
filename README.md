@@ -144,6 +144,18 @@ add_executable(your_app
 target_link_libraries(your_app
                       pico_stdlib
                       pico_fota_bootloader_lib)
+
+# Workaround for picotool 2.3.0 model auto-detection logic:
+if(${PICO_PLATFORM} STREQUAL "rp2350-arm-s" OR ${PICO_PLATFORM} STREQUAL "rp2350")
+    set_target_properties(your_app PROPERTIES
+                          PICOTOOL_EXTRA_UF2_ARGS "--platform;rp2350")    
+elseif(${PICO_PLATFORM} STREQUAL "rp2040")
+    set_target_properties(your_app PROPERTIES
+                          PICOTOOL_EXTRA_UF2_ARGS "--platform;rp2040")    
+else()
+    message(FATAL_ERROR "Platform not supported: ${PICO_PLATFORM}")
+endif()
+
 pfb_compile_with_bootloader(your_app)
 pico_add_extra_outputs(your_app)
 # rest of the file if needed...
