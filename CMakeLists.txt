@@ -120,6 +120,20 @@ set(BOOTLOADER_DIR_GLOBAL ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
 # Manage application binary
 ########################################
 function(pfb_compile_with_bootloader Target)
+    # Workaround for picotool 2.3.0 model auto-detection logic:
+    if (${PICO_SDK_VERSION_MAJOR} EQUAL 2 AND ${PICO_SDK_VERSION_MINOR} EQUAL 3 AND ${PICO_SDK_VERSION_REVISION} EQUAL 0)
+        message(STATUS "PICO_SDK_VERSION is 2.3.0, setting PICOTOOL_EXTRA_UF2_ARGS to specify platform")
+        if (${PICO_PLATFORM} STREQUAL "rp2350-arm-s" OR ${PICO_PLATFORM} STREQUAL "rp2350")
+            set_target_properties(${Target} PROPERTIES
+                                PICOTOOL_EXTRA_UF2_ARGS "--platform;rp2350")
+        elseif (${PICO_PLATFORM} STREQUAL "rp2040")
+            set_target_properties(${Target} PROPERTIES
+                                PICOTOOL_EXTRA_UF2_ARGS "--platform;rp2040")
+        else ()
+            message(FATAL_ERROR "Platform not supported: ${PICO_PLATFORM}")
+        endif ()
+    endif ()
+
     target_link_options(${Target} PRIVATE
         "-L${BOOTLOADER_DIR_GLOBAL}/linker_common"
         "-L${BOOTLOADER_LINKER_DIR_GLOBAL}")
