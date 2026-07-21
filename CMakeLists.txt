@@ -54,13 +54,12 @@ endif()
 ########################################
 # Build linker definitions
 ########################################
-# PICO_FLASH_SIZE_BYTES
-execute_process(
-    COMMAND cat ${CMAKE_CURRENT_LIST_DIR}/linker_common/linker_definitions.in
-    COMMAND ${CMAKE_C_COMPILER} -DFLASH_SIZE=${PICO_FLASH_SIZE_BYTES}
-            -DFILESYSTEM_SIZE=${PFB_RESERVED_FILESYSTEM_SIZE_KB} -E -P
-            -o ${CMAKE_BINARY_DIR}/linker_definitions.ld -
-    )
+set(BOOTLOADER_LINKER_DIR_GLOBAL ${CMAKE_BINARY_DIR} PARENT_SCOPE)
+configure_file(
+    ${CMAKE_CURRENT_LIST_DIR}/linker_common/linker_definitions.in
+    ${CMAKE_BINARY_DIR}/linker_definitions.ld
+    @ONLY
+)
 ########################################
 # Check and set AES key
 ########################################
@@ -99,8 +98,9 @@ target_link_libraries(pico_fota_bootloader_lib PUBLIC
                       hardware_flash)
 target_link_libraries(pico_fota_bootloader_lib PRIVATE
                       pico_mbedtls)
+target_link_directories(pico_fota_bootloader_lib PUBLIC "${CMAKE_BINARY_DIR}")
 target_link_options(pico_fota_bootloader_lib PRIVATE
-                    "-T${CMAKE_CURRENT_BINARY_DIR}/linker_definitions.ld")
+                    "-T${CMAKE_BINARY_DIR}/linker_definitions.ld")
 target_compile_options(pico_fota_bootloader_lib PRIVATE
                        -Wall
                        -Wextra
@@ -120,7 +120,9 @@ set(BOOTLOADER_DIR_GLOBAL ${CMAKE_CURRENT_SOURCE_DIR} PARENT_SCOPE)
 # Manage application binary
 ########################################
 function(pfb_compile_with_bootloader Target)
-    target_link_options(${Target} PRIVATE "-L${BOOTLOADER_DIR_GLOBAL}/linker_common" "-L${CMAKE_CURRENT_BINARY_DIR}")
+    target_link_options(${Target} PRIVATE
+        "-L${BOOTLOADER_DIR_GLOBAL}/linker_common"
+        "-L${BOOTLOADER_LINKER_DIR_GLOBAL}")
     pico_set_linker_script(${Target} ${BOOTLOADER_DIR_GLOBAL}/linker_common/app${CPU}.ld)
 
     if (PFB_WITH_SHA256_HASHING OR PFB_WITH_IMAGE_ENCRYPTION)
@@ -179,7 +181,7 @@ target_compile_definitions(pico_fota_bootloader PRIVATE -DPICO_PLATFORM=${PICO_P
 target_compile_link_options(pico_fota_bootloader "-Os")
 target_compile_link_options(pico_fota_bootloader "-ffunction-sections")
 target_compile_link_options(pico_fota_bootloader "-fdata-sections")
-target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/linker_common" "-L${CMAKE_CURRENT_BINARY_DIR}")
+target_compile_link_options(pico_fota_bootloader "-L${CMAKE_CURRENT_SOURCE_DIR}/linker_common" "-L${CMAKE_BINARY_DIR}")
 target_link_options(pico_fota_bootloader PRIVATE "LINKER:--gc-sections")
 target_compile_options(pico_fota_bootloader PRIVATE
                        -Wall
