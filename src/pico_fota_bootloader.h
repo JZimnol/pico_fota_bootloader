@@ -4,8 +4,6 @@
 extern "C" {
 #endif
 
-#include <pico/stdlib.h>
-
 /**
  * Some random values tbh.
  */
@@ -25,10 +23,10 @@ extern "C" {
 #define PFB_ADDR_WITH_XIP_OFFSET_AS_U32(Data) \
     (PFB_ADDR_AS_U32(Data) - (XIP_BASE))
 
-void flash_utils_mark_download_slot(uint32_t magic);
-void flash_utils_notify_pico_about_firmware(uint32_t magic);
-void flash_utils_mark_if_should_rollback(uint32_t magic);
-void flash_utils_mark_if_is_after_rollback(uint32_t magic);
+void pfb_mark_download_slot(uint32_t magic);
+void pfb_notify_pico_about_firmware(uint32_t magic);
+void pfb_mark_if_should_rollback(uint32_t magic);
+void pfb_mark_if_is_after_rollback(uint32_t magic);
 
 #ifdef __cplusplus
 }

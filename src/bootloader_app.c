@@ -39,8 +39,8 @@
 
 #include <pico_fota_bootloader/core.h>
 
-#include "flash_utils.h"
 #include "linker_definitions.h"
+#include "pico_fota_bootloader.h"
 
 #ifdef PFB_WITH_BOOTLOADER_LOGS
 #    define BOOTLOADER_LOG(...)                \
@@ -53,15 +53,15 @@
 #endif // PFB_WITH_BOOTLOADER_LOGS
 
 static void mark_should_rollback(void) {
-    flash_utils_mark_if_should_rollback(PFB_SHOULD_ROLLBACK_MAGIC);
+    pfb_mark_if_should_rollback(PFB_SHOULD_ROLLBACK_MAGIC);
 }
 
 static void mark_is_after_rollback(void) {
-    flash_utils_mark_if_is_after_rollback(PFB_IS_AFTER_ROLLBACK_MAGIC);
+    pfb_mark_if_is_after_rollback(PFB_IS_AFTER_ROLLBACK_MAGIC);
 }
 
 static void mark_is_not_after_rollback(void) {
-    flash_utils_mark_if_is_after_rollback(PFB_IS_NOT_AFTER_ROLLBACK_MAGIC);
+    pfb_mark_if_is_after_rollback(PFB_IS_NOT_AFTER_ROLLBACK_MAGIC);
 }
 
 static bool should_rollback(void) {
@@ -73,11 +73,11 @@ static bool has_firmware_to_swap(void) {
 }
 
 static void mark_pico_has_new_firmware(void) {
-    flash_utils_notify_pico_about_firmware(PFB_HAS_NEW_FIRMWARE_MAGIC);
+    pfb_notify_pico_about_firmware(PFB_HAS_NEW_FIRMWARE_MAGIC);
 }
 
 static void mark_has_no_new_firmware(void) {
-    flash_utils_notify_pico_about_firmware(PFB_NO_NEW_FIRMWARE_MAGIC);
+    pfb_notify_pico_about_firmware(PFB_NO_NEW_FIRMWARE_MAGIC);
 }
 
 static void swap_images(void) {

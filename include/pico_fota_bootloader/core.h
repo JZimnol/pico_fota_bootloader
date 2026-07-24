@@ -29,6 +29,15 @@ extern "C" {
 #include <pico/stdlib.h>
 
 #define PFB_ALIGN_SIZE (256)
+typedef void (*flash_executor_t)(void (*fn)(void *), void *param);
+void flash_exec_bare(void (*fn)(void *), void *param);
+void flash_util_set_executor(flash_executor_t exec);
+
+/**
+ * Returns the start address of the filesystem in flash memory.
+ * @return Start address of the filesystem in flash memory.
+ */
+uint32_t pfb_get_filesystem_start_address(void);
 
 /**
  * Marks the download slot as valid, i.e. download slot contains proper binary
@@ -52,6 +61,13 @@ void pfb_mark_download_slot_as_invalid(void);
  *         false otherwise.
  */
 bool pfb_is_after_firmware_update(void);
+
+/**
+ * Returns the size of the download slot in bytes.
+ *
+ * @return Size of the download slot in bytes.
+ */
+uint32_t pfb_get_download_slot_size(void);
 
 /**
  * Writes data into the download partition and checks, if the length of the data
@@ -124,6 +140,13 @@ bool pfb_is_after_rollback(void);
  *         always return 0.
  */
 int pfb_firmware_sha256_check(size_t firmware_size);
+
+
+
+
+void write_flash_update(uint32_t offset_with_xip, const uint8_t *data, size_t length);
+void write_flash_pages(uint32_t offset, uint8_t data[], size_t length);
+void erase_flash_sectors(uint32_t sector_offset, size_t length);
 
 #ifdef __cplusplus
 }
