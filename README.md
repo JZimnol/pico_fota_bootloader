@@ -88,6 +88,7 @@ The memory layout is as follows:
 - **filesystem block** - block at the end of the flash, reserved for a file system.
   0 by default, can be set with
     `-DPFB_RESERVED_FILESYSTEM_SIZE_KB=<value in KB>` CMake flag.
+  **NOTE:** Should be a muliple of 8KB as the space between __FLASH_APP_START and __FILESYSTEM_START is divided by 2 (application slot and download slot) and result should still be divideble by 4KB.
 
 - **define own flash function** - by default flash is writen accordenly to the pico 
   default flow, save_and_disable_interrupts(), preform flash function, restore_interrupts(saved). 
