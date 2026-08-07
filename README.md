@@ -28,7 +28,7 @@ The memory layout is as follows:
 |           Flash Application Slot          |
 +-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START
 |            Flash Download Slot            |
-+-------------------------------------------+
++-------------------------------------------+  <-- __FILESYSTEM_START
 |   Filesystem Block (FILESYSTEM_SIZE)      |
 |              (Optional)                   |
 +-------------------------------------------+  <-- __FLASH_END (FLASH_SIZE)
@@ -88,7 +88,21 @@ The memory layout is as follows:
 - **filesystem block** - block at the end of the flash, reserved for a file system.
   0 by default, can be set with
     `-DPFB_RESERVED_FILESYSTEM_SIZE_KB=<value in KB>` CMake flag.
+  **NOTE:** Should be a muliple of 8KB as the space between __FLASH_APP_START and __FILESYSTEM_START is divided by 2 (application slot and download slot) and result should still be divideble by 4KB.
 
+- **define own flash function** - by default flash is writen accordenly to the pico 
+  default flow, save_and_disable_interrupts(), preform flash function, restore_interrupts(saved). 
+  For RTOS systems this flow is differend and can be set by calling flash_util_set_executor(flash_executor_t exec)
+  with a function pointer with the specific fuction for that RTOS system. For example for FreeRTOS:
+  ```
+  static void flash_exec_rtos(void (*fn)(void *), void *param){
+    bool running_rtos = xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
+    if(running_rtos)
+        flash_safe_execute(fn, param, 10000);
+    else
+        flash_exec_bare(fn, param);
+  }
+  ```
 ## Prerequisites
 
 - `pico-sdk` version `>= 2.2.0`

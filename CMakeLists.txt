@@ -47,8 +47,15 @@ endif()
 if ( NOT DEFINED PFB_WITH_SHA256_HASHING )
     option(PFB_WITH_SHA256_HASHING "Enables image SHA256 appending and checking" ON)
 endif()
-if ( NOT PFB_RESERVED_FILESYSTEM_SIZE_KB )
+if (NOT DEFINED PFB_RESERVED_FILESYSTEM_SIZE_KB)
     set(PFB_RESERVED_FILESYSTEM_SIZE_KB 0 CACHE STRING "EXPERIMENTAL: Size in KB reserved for the filesystem")
+endif()
+
+if (PFB_RESERVED_FILESYSTEM_SIZE_KB GREATER 0)
+    math(EXPR PFB_RESERVED_FILESYSTEM_SIZE_KB_MOD_8 "${PFB_RESERVED_FILESYSTEM_SIZE_KB} % 8")
+    if (NOT PFB_RESERVED_FILESYSTEM_SIZE_KB_MOD_8 EQUAL 0)
+        message(FATAL_ERROR "PFB_RESERVED_FILESYSTEM_SIZE_KB must be a multiple of 8 KB")
+    endif()
 endif()
 
 ########################################

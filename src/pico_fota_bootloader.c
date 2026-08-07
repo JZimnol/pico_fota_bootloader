@@ -37,7 +37,7 @@
 
 #include <pico_fota_bootloader/core.h>
 
-#include "flash_utils.h"
+#include "pico_fota_bootloader.h"
 #include "linker_definitions.h"
 
 #define PFB_SHA256_DIGEST_SIZE 32
@@ -66,12 +66,25 @@ static int decrypt_256_bytes(const uint8_t *src, uint8_t *out_dest) {
 }
 #endif // PFB_WITH_IMAGE_ENCRYPTION
 
+uint32_t pfb_get_filesystem_start_address(void) {
+    return PFB_ADDR_AS_U32(__FILESYSTEM_START);
+}
+
+uint32_t pfb_get_download_slot_size(void) {
+    return PFB_ADDR_AS_U32(__FLASH_SWAP_SPACE_LENGTH);
+}
+void pfb_mark_download_slot(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_IS_DOWNLOAD_SLOT_VALID);
+
+    write_flash_update(dest_addr, (uint8_t*)&magic, sizeof(magic));
+}
+
 void pfb_mark_download_slot_as_valid(void) {
-    flash_utils_mark_download_slot(PFB_SHOULD_SWAP_MAGIC);
+    pfb_mark_download_slot(PFB_SHOULD_SWAP_MAGIC);
 }
 
 void pfb_mark_download_slot_as_invalid(void) {
-    flash_utils_mark_download_slot(PFB_SHOULD_NOT_SWAP_MAGIC);
+    pfb_mark_download_slot(PFB_SHOULD_NOT_SWAP_MAGIC);
 }
 
 bool pfb_is_after_firmware_update(void) {
@@ -104,9 +117,7 @@ int pfb_write_to_flash_aligned_256_bytes(uint8_t *src,
 #else  // PFB_WITH_IMAGE_ENCRYPTION
                 src + i * PFB_ALIGN_SIZE;
 #endif // PFB_WITH_IMAGE_ENCRYPTION
-        uint32_t saved_interrupts = save_and_disable_interrupts();
-        flash_range_program(dest_address, src_address, PFB_ALIGN_SIZE);
-        restore_interrupts(saved_interrupts);
+        write_flash_pages(dest_address, src_address, FLASH_PAGE_SIZE);
     }
     return 0;
 }
@@ -119,9 +130,7 @@ int pfb_initialize_download_slot(void) {
 
     pfb_firmware_commit();
 
-    uint32_t saved_interrupts = save_and_disable_interrupts();
-    flash_range_erase(erase_address_with_xip_offset, erase_len);
-    restore_interrupts(saved_interrupts);
+    erase_flash_sectors(erase_address_with_xip_offset, erase_len);
 
 #ifdef PFB_WITH_IMAGE_ENCRYPTION
     mbedtls_aes_free(&m_aes_ctx);
@@ -146,13 +155,32 @@ void pfb_perform_update(void) {
         ;
 }
 
+void pfb_mark_if_should_rollback(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_SHOULD_ROLLBACK);
+
+    write_flash_update(dest_addr, (uint8_t*)&magic, sizeof(magic));
+}
 void pfb_firmware_commit(void) {
-    flash_utils_mark_if_should_rollback(PFB_SHOULD_NOT_ROLLBACK_MAGIC);
+    pfb_mark_if_should_rollback(PFB_SHOULD_NOT_ROLLBACK_MAGIC);
+}
+
+void pfb_mark_if_is_after_rollback(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_IS_AFTER_ROLLBACK);
+
+    write_flash_update(dest_addr, (uint8_t*)&magic, sizeof(magic));
 }
 
 bool pfb_is_after_rollback(void) {
     return (__FLASH_INFO_IS_AFTER_ROLLBACK == PFB_IS_AFTER_ROLLBACK_MAGIC);
 }
+
+
+void pfb_notify_pico_about_firmware(uint32_t magic) {
+    uint32_t dest_addr = PFB_ADDR_AS_U32(__FLASH_INFO_IS_FIRMWARE_SWAPPED);
+
+    write_flash_update(dest_addr, (uint8_t*)&magic, sizeof(magic));
+}
+
 
 #ifdef PFB_WITH_SHA256_HASHING
 #if MBEDTLS_VERSION_MAJOR >= 3

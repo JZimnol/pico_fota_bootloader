@@ -41,7 +41,7 @@
     |         Flash Application Slot            |
     +-------------------------------------------+  <-- __FLASH_DOWNLOAD_SLOT_START
     |           Flash Download Slot             |
-    +-------------------------------------------+
+    +-------------------------------------------+  <-- __FILESYSTEM_START
     |   Filesystem Block (FILESYSTEM_SIZE)      |
     |              (Optional)                   |
     +-------------------------------------------+  <-- __FLASH_END (FLASH_SIZE)
@@ -66,6 +66,8 @@ __FLASH_APP_START = __FLASH_INFO_START + __FLASH_INFO_LENGTH;
 
 /* (FLASH_SIZE - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH - __FILESYSTEM_SIZE) / 2 */
 __FLASH_SWAP_SPACE_LENGTH = (__FLASH_SIZE - __BOOTLOADER_LENGTH - __FLASH_INFO_LENGTH) / 2;
+
+__FILESYSTEM_START = __FLASH_APP_START + 2 * __FLASH_SWAP_SPACE_LENGTH;
 
 /*
 (max binary size) == (.text .rodata .big_const .binary_info) + (possible .data)
