@@ -137,7 +137,7 @@ static void jump_to_vtor(uint32_t vtor) {
     uint32_t reset_vector = *(volatile uint32_t *) (vtor + 0x04);
     SCB->VTOR = (volatile uint32_t)(vtor);
 
-    asm volatile("msr msp, %0" ::"g"(*(volatile uint32_t *) vtor));
+    asm volatile("msr msp, %0" ::"r"(*(volatile uint32_t *) vtor));
     asm volatile("bx %0" ::"r"(reset_vector));
 }
 
